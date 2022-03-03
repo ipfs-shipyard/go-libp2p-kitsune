@@ -11,6 +11,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
+	cm "github.com/mcamou/go-libp2p-kitsune/connection_manager"
 )
 
 func copyMatcher(proto string) bool {
@@ -38,14 +39,14 @@ func copyMatcher(proto string) bool {
 	}
 }
 
-func copyHandler(ha host.Host, targets *PeerList, connMap *ConnMap) func(s network.Stream) {
+func copyHandler(ha host.Host, downCm *cm.Downstream, connMap *ConnMap) func(s network.Stream) {
 	return func(upStream network.Stream) {
 		defer upStream.Close()
 
 		upPeer := upStream.Conn().RemotePeer()
 		proto := upStream.Protocol()
 
-		if targets.Contains(upPeer) {
+		if downCm.ContainsPeer(upPeer) {
 			log.Warnf("Received non-bitswap stream %v from downstream peer %v\n. Bailing out.", proto, upPeer)
 			return
 		}
@@ -56,9 +57,9 @@ func copyHandler(ha host.Host, targets *PeerList, connMap *ConnMap) func(s netwo
 		if len(downPeers) == 0 {
 			log.Debugf("Downstream peer not found for upstream %v, connecting to %v\n", upPeer, downPeer)
 
-			// TODO detect when a downstream peer is down and try the next one
 			// For the moment just use round robin
-			downPeer = targets.GetItem()
+			addr := downCm.Next()
+			_, upPeer := peer.SplitAddr(addr)
 			connMap.Put(upPeer, downPeer)
 		} else {
 			downPeer = downPeers[0].(peer.ID)

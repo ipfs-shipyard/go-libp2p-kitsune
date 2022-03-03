@@ -9,6 +9,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
 	msgio "github.com/libp2p/go-msgio"
+	cm "github.com/mcamou/go-libp2p-kitsune/connection_manager"
 
 	bsmsg "github.com/ipfs/go-bitswap/message"
 	bspb "github.com/ipfs/go-bitswap/message/pb"
@@ -42,16 +43,16 @@ var (
 // Some open questions:
 //   - Do we need to create a new stream to the upstream peer or can we reuse the one we already have?
 //   - If so, do we need to create a new stream for each block?
-func bitswapHandler(ha host.Host, targets *PeerList, connMap *ConnMap, wantMap *WantMap) func(s network.Stream) {
+func bitswapHandler(ha host.Host, downstreamCm *cm.Downstream, connMap *ConnMap, wantMap *WantMap) func(s network.Stream) {
 	return func(inStream network.Stream) {
 		inPeer := inStream.Conn().RemotePeer()
 
 		defer inStream.Close()
 
-		if targets.Contains(inPeer) {
+		if downstreamCm.ContainsPeer(inPeer) {
 			handleDownStream(ha, wantMap, inStream)
 		} else {
-			handleUpStream(ha, targets, connMap, wantMap, inStream)
+			handleUpStream(ha, downstreamCm, connMap, wantMap, inStream)
 		}
 
 	}
@@ -126,7 +127,7 @@ func handleDownStream(ha host.Host, wantMap *WantMap, downStream network.Stream)
 }
 
 // Handle an incoming stream from an upstream peer
-func handleUpStream(ha host.Host, targets *PeerList, connMap *ConnMap, wantMap *WantMap, upStream network.Stream) {
+func handleUpStream(ha host.Host, downstreamCm *cm.Downstream, connMap *ConnMap, wantMap *WantMap, upStream network.Stream) {
 	defer upStream.Close()
 
 	// Some of this adapted from go-bitswap/network/ipfs_impl.go#handleNewStream
@@ -140,7 +141,8 @@ func handleUpStream(ha host.Host, targets *PeerList, connMap *ConnMap, wantMap *
 	if len(downPeers) == 0 {
 		// For the moment just use round robin
 		// TODO detect when a downstream peer is down and try the next one
-		downPeer = targets.GetItem()
+		addr := downstreamCm.Next()
+		_, downPeer = peer.SplitAddr(addr)
 		log.Debugf("Downstream peer not found for upstream %v, connecting to %v\n", upPeer, downPeer)
 		connMap.Put(upPeer, downPeer)
 	} else {

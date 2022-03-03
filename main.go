@@ -12,11 +12,11 @@ import (
 	"strings"
 
 	bmm "github.com/mcamou/go-libp2p-kitsune/bimultimap"
+	cm "github.com/mcamou/go-libp2p-kitsune/connection_manager"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
 
 	logging "github.com/ipfs/go-log/v2"
@@ -81,29 +81,30 @@ func main() {
 	}
 
 	log.Info("Proxy addresses:")
-	printArray(getHostAddresses(ha), 4)
+	printAddrs(getHostAddresses(ha), 4)
 
 	log.Info("Downstream hosts:")
-	printArray(targetAddrsStr, 4)
+	printAddrs(targetAddrs, 4)
 
-	targets, err := connectToPeers(ha, ctx, targetAddrs)
+	d, err := cm.NewDownstream(ha, ctx, targetAddrs...)
 	if err != nil {
 		log.Fatalf("Error connecting to downstream peers: %v\n", err)
 	}
+
+	d.ConnectAll(&ha, ctx)
 
 	// TODO Clean up the connMap/wantMap entries when a peer disconnects
 	// TODO To ensure that accessing /ipfs/v0/refs goes to the same host, we will need to also have our own HTTP
 	//      proxy. How do we map from remote HTTP address -> remote peer?
 	// TODO functional and performance tests!!!
 	// TODO Add metrics
-	// TODO What happens if an upstream host disappears?
 
 	// remotePeer <-> downstream host
 	connMap := bmm.NewBiMultiMap()
 	// CID <-> PeerIDs with wants
 	wantMap := bmm.NewBiMultiMap()
 
-	startListener(ctx, ha, targets, connMap, wantMap, *listenF)
+	startListener(ctx, ha, d, connMap, wantMap, *listenF)
 
 	log.Infof("Listening for connections on %s\n", ha.Network().ListenAddresses()[0])
 
@@ -165,60 +166,34 @@ func makeHost(listenMaddr ma.Multiaddr, priv crypto.PrivKey) (host.Host, error) 
 	return ha, err
 }
 
-func connectToPeers(ha host.Host, ctx context.Context, peers []ma.Multiaddr) (*PeerList, error) {
-	targetArr := make([]peer.ID, len(peers))
-	var err error
-
-	for i, target := range peers {
-		peerInfo, err := peer.AddrInfoFromP2pAddr(target)
-		if err != nil {
-			log.Infof("Invalid target multiaddr %s: %s\n", target, err)
-			return nil, err
-		}
-
-		// Connect to the target host which will also add it to the peerstore
-		// TODO Handle connection failures and reconnects. Or will libp2p handle reconnects for us?
-		err = ha.Connect(ctx, *peerInfo)
-		if err != nil {
-			return nil, err
-		}
-
-		targetArr[i] = peerInfo.ID
-	}
-
-	if err == nil {
-		return NewPeerList(targetArr...), nil
-	} else {
-		return nil, err
-	}
-}
-
-func getHostAddresses(ha host.Host) []string {
+func getHostAddresses(ha host.Host) []ma.Multiaddr {
 	peerId, _ := ma.NewMultiaddr(fmt.Sprintf("/p2p/%s", ha.ID().Pretty()))
 
 	hostAddrs := ha.Addrs()
-	addrs := make([]string, len(hostAddrs))
-	for i, addr := range hostAddrs {
-		addrs[i] = addr.Encapsulate(peerId).String()
+	addrs := make([]ma.Multiaddr, 0, len(hostAddrs))
+	for _, baseAddr := range hostAddrs {
+		addrString := baseAddr.Encapsulate(peerId).String()
+		addr, _ := ma.NewMultiaddr(addrString)
+		addrs = append(addrs, addr)
 	}
 	return addrs
 }
 
-func startListener(ctx context.Context, ha host.Host, targets *PeerList, connMap *ConnMap, wantMap *WantMap, listenMultiaddr string) {
+func startListener(ctx context.Context, ha host.Host, downstreamCm *cm.Downstream, connMap *ConnMap, wantMap *WantMap, listenMultiaddr string) {
 	// Protocols that we handle ourselves
 	ping.NewPingService(ha)
 
 	// It would be nice to make this more generic (i.e. adding other protocols)
-	ha.SetStreamHandler(ProtocolBitswap, bitswapHandler(ha, targets, connMap, wantMap))
-	ha.SetStreamHandler(ProtocolBitswapOneOne, bitswapHandler(ha, targets, connMap, wantMap))
-	ha.SetStreamHandler(ProtocolBitswapOneZero, bitswapHandler(ha, targets, connMap, wantMap))
-	ha.SetStreamHandler(ProtocolBitswapNoVers, bitswapHandler(ha, targets, connMap, wantMap))
+	ha.SetStreamHandler(ProtocolBitswap, bitswapHandler(ha, downstreamCm, connMap, wantMap))
+	ha.SetStreamHandler(ProtocolBitswapOneOne, bitswapHandler(ha, downstreamCm, connMap, wantMap))
+	ha.SetStreamHandler(ProtocolBitswapOneZero, bitswapHandler(ha, downstreamCm, connMap, wantMap))
+	ha.SetStreamHandler(ProtocolBitswapNoVers, bitswapHandler(ha, downstreamCm, connMap, wantMap))
 
 	// Generic handler for any other protocols
-	ha.SetStreamHandlerMatch("", copyMatcher, copyHandler(ha, targets, connMap))
+	ha.SetStreamHandlerMatch("", copyMatcher, copyHandler(ha, downstreamCm, connMap))
 }
 
-func printArray(arr []string, indent int) {
+func printAddrs(arr []ma.Multiaddr, indent int) {
 	for _, elem := range arr {
 		log.Infof("%s%s", strings.Repeat(" ", indent), elem)
 	}
