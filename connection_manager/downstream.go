@@ -7,7 +7,6 @@ import (
 	"time"
 
 	logging "github.com/ipfs/go-log/v2"
-	"github.com/libp2p/go-libp2p-core/event"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -111,8 +110,8 @@ func (d *Downstream) Peers() []ma.Multiaddr {
 
 // ConnectAll connects to all the downstream peers and establishes a background goroutine
 // to reconnect when they disconnect
-func (d *Downstream) ConnectAll(h *host.Host, ctx context.Context) {
-	go reconnect(d, ctx)
+func (d *Downstream) ConnectAll(h *host.Host, ctx context.Context, n *Notifiee) {
+	d.host.Network().Notify(n)
 
 	d.peerRing.Do(func(target interface{}) {
 		log.Debugf("Connecting to downstream peer %v", target)
@@ -121,45 +120,13 @@ func (d *Downstream) ConnectAll(h *host.Host, ctx context.Context) {
 			log.Errorf("Error while parsing multiaddr %s: %s", target, err)
 		} else {
 			log.Debugf("Connecting to peer %v", peerInfo)
-			go d.reconnectLoop(*peerInfo)
+			go d.connectLoop(*peerInfo)
 		}
 	})
 }
 
-// reconnect is the goroutine that reconnects whenever a peer is disconnected
-func reconnect(d *Downstream, ctx context.Context) {
-	ch, err := d.host.EventBus().Subscribe(&event.EvtPeerConnectednessChanged{})
-	if err != nil {
-		log.Fatalf("Error creating EventBus subscription: %v", err)
-		return
-	}
-
-	log.Debug("Starting downstream host reconnection loop")
-	for {
-		evt := (<-ch.Out()).(event.EvtPeerConnectednessChanged)
-
-		switch evt.Connectedness {
-		case network.Connected:
-			if d.ContainsPeer(evt.Peer) {
-				log.Debugf("Connected to downstream peer %v", evt.Peer)
-			}
-
-		case network.NotConnected:
-			// Only reconnect to downstream peers
-			if d.ContainsPeer(evt.Peer) {
-				info := d.host.Peerstore().PeerInfo(evt.Peer)
-				log.Debugf("Downstream peer %v disconnected, reconnecting", info)
-				go d.reconnectLoop(info)
-			}
-
-		default:
-			log.Debugf("Received event: %v", evt)
-		}
-	}
-}
-
-// reconnectLoop is a goroutine that periodically tries to reconnect to a disconnected peer
-func (d *Downstream) reconnectLoop(info peer.AddrInfo) {
+// connectLoop is a goroutine that periodically tries to connect to a disconnected peer
+func (d *Downstream) connectLoop(info peer.AddrInfo) {
 	log.Debug("Starting reconnection loop for peer", info)
 	for {
 		err := d.host.Connect(d.ctx, info)

@@ -91,8 +91,6 @@ func main() {
 		log.Fatalf("Error connecting to downstream peers: %v\n", err)
 	}
 
-	d.ConnectAll(&ha, ctx)
-
 	// TODO Clean up the connMap/wantMap entries when a peer disconnects
 	// TODO To ensure that accessing /ipfs/v0/refs goes to the same host, we will need to also have our own HTTP
 	//      proxy. How do we map from remote HTTP address -> remote peer?
@@ -103,6 +101,9 @@ func main() {
 	connMap := bmm.NewBiMultiMap()
 	// CID <-> PeerIDs with wants
 	wantMap := bmm.NewBiMultiMap()
+
+	n := cm.NewNotifiee(d)
+	d.ConnectAll(&ha, ctx, n)
 
 	startListener(ctx, ha, d, connMap, wantMap, *listenF)
 
