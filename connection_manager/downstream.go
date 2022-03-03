@@ -56,13 +56,30 @@ func (d *Downstream) String() string {
 	return s
 }
 
-// Next gets the next peer to connect to. At the moment it does round-robin and does not verify
-// that we are actually connected to the peer
+// Next gets the next peer to connect to. At the moment it does round-robin
 func (d *Downstream) Next() ma.Multiaddr {
-	// TODO detect when a peer is disconnected and try the next one
-	// TODO Locking?
-	addr := d.peerRing.Value.(ma.Multiaddr)
-	d.peerRing = d.peerRing.Next()
+	// Do we need locking? Worst thing that can happen is 2 or more upstream peers connect at the
+	// same time, they connect to the same downstream peer, and the next one gets skipped. I am
+	// not sure that the performance penalty for locking is actually worth it.
+	var addr ma.Multiaddr
+
+	// Save the current one in case no downstream hosts are available
+	current := d.peerRing.Value.(ma.Multiaddr)
+
+	for {
+		addr = d.peerRing.Value.(ma.Multiaddr)
+		d.peerRing = d.peerRing.Next()
+
+		_, peer := peer.SplitAddr(addr)
+		if d.host.Network().Connectedness(peer) == network.Connected {
+			break
+		} else if addr == current {
+			log.Warn("All downstream peers are disconnected. Waiting for a few seconds before retrying.")
+			// TODO Make configurable, possibly backoff
+			time.Sleep(5 * time.Second)
+		}
+
+	}
 	return addr
 }
 
@@ -151,7 +168,7 @@ func (d *Downstream) reconnectLoop(info peer.AddrInfo) {
 		}
 
 		log.Errorf("Failed to reconnect to downstream peer %v. Attempting reconnection. Error: %s", info, err)
-		// TODO Allow configuration, perhaps backoff?
+		// TODO Make configurable, perhaps backoff?
 		time.Sleep(5 * time.Second)
 	}
 }

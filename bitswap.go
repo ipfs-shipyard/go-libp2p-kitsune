@@ -139,11 +139,10 @@ func handleUpStream(ha host.Host, downstreamCm *cm.Downstream, connMap *ConnMap,
 	var downPeer peer.ID
 
 	if len(downPeers) == 0 {
-		// For the moment just use round robin
-		// TODO detect when a downstream peer is down and try the next one
 		addr := downstreamCm.Next()
 		_, downPeer = peer.SplitAddr(addr)
 		log.Debugf("Downstream peer not found for upstream %v, connecting to %v\n", upPeer, downPeer)
+
 		connMap.Put(upPeer, downPeer)
 	} else {
 		downPeer = downPeers[0].(peer.ID)
