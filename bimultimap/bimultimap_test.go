@@ -27,6 +27,18 @@ func TestBiMultiMapPut(t *testing.T) {
 	assert.Equal(t, []interface{}{"key"}, sut.GetKeys("value"), "the key associated with the value should be the correct one")
 }
 
+func TestBiMultiMapPutDup(t *testing.T) {
+	sut := NewBiMultiMap()
+	sut.Put("key", "value")
+	sut.Put("key", "value")
+
+	assert.True(t, sut.KeyExists("key"), "the key should exist")
+	assert.Equal(t, []interface{}{"value"}, sut.GetValues("key"), "the value associated with the key should not be duplicated")
+
+	assert.True(t, sut.ValueExists("value"), "the value should exist")
+	assert.Equal(t, []interface{}{"key"}, sut.GetKeys("value"), "the key associated with the value should not be duplicated")
+}
+
 func TestBiMultiMapMultiPut(t *testing.T) {
 	sut := biMultiMapWithMultipleKeysValues()
 

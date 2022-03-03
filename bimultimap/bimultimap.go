@@ -56,6 +56,13 @@ func (m *BiMultiMap) Put(key interface{}, value interface{}) {
 		values = make([]interface{}, 0, 1)
 	}
 
+	// Value already exists for that key - early exit
+	for _, v := range values {
+		if v == value {
+			return
+		}
+	}
+
 	values = append(values, value)
 	m.forward[key] = values
 
