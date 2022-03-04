@@ -1,21 +1,24 @@
-package main
+package bitswap
 
 import (
 	"context"
 	"fmt"
 	"io"
 
+	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
 	msgio "github.com/libp2p/go-msgio"
-	cm "github.com/mcamou/go-libp2p-kitsune/connection_manager"
 
 	bsmsg "github.com/ipfs/go-bitswap/message"
 	bspb "github.com/ipfs/go-bitswap/message/pb"
-	icid "github.com/ipfs/go-cid"
-	"github.com/libp2p/go-libp2p-core/host"
+	logging "github.com/ipfs/go-log/v2"
+
+	cm "github.com/mcamou/go-libp2p-kitsune/connection_manager"
 )
+
+var log = logging.Logger("bitswap")
 
 var (
 	// ProtocolBitswapNoVers is equivalent to the legacy bitswap protocol
@@ -27,6 +30,14 @@ var (
 	// ProtocolBitswap is the current version of the bitswap protocol: 1.2.0
 	ProtocolBitswap protocol.ID = "/ipfs/bitswap/1.2.0"
 )
+
+func AddBitswapHandler(h host.Host, connMgr *cm.ConnectionManager) {
+	// It would be nice to make this more generic (i.e. adding other protocols)
+	h.SetStreamHandler(ProtocolBitswap, bitswapHandler(h, connMgr))
+	h.SetStreamHandler(ProtocolBitswapOneOne, bitswapHandler(h, connMgr))
+	h.SetStreamHandler(ProtocolBitswapOneZero, bitswapHandler(h, connMgr))
+	h.SetStreamHandler(ProtocolBitswapNoVers, bitswapHandler(h, connMgr))
+}
 
 // Stream handler for the /ipfs/bitswap/* protocols
 //
@@ -43,16 +54,16 @@ var (
 // Some open questions:
 //   - Do we need to create a new stream to the upstream peer or can we reuse the one we already have?
 //   - If so, do we need to create a new stream for each block?
-func bitswapHandler(ha host.Host, downstreamCm *cm.Downstream, connMap *ConnMap, wantMap *WantMap) func(s network.Stream) {
+func bitswapHandler(ha host.Host, connMgr *cm.ConnectionManager) func(s network.Stream) {
 	return func(inStream network.Stream) {
 		inPeer := inStream.Conn().RemotePeer()
 
 		defer inStream.Close()
 
-		if downstreamCm.ContainsPeer(inPeer) {
-			handleDownStream(ha, wantMap, inStream)
+		if connMgr.IsDownstreamPeer(inPeer) {
+			handleDownStream(ha, connMgr, inStream)
 		} else {
-			handleUpStream(ha, downstreamCm, connMap, wantMap, inStream)
+			handleUpStream(ha, connMgr, inStream)
 		}
 
 	}
@@ -60,7 +71,7 @@ func bitswapHandler(ha host.Host, downstreamCm *cm.Downstream, connMap *ConnMap,
 
 // Handle a connection from a from a downstream peer (which will be in reply to a WANT message
 // from an upstream peer)
-func handleDownStream(ha host.Host, wantMap *WantMap, downStream network.Stream) {
+func handleDownStream(ha host.Host, connMgr *cm.ConnectionManager, downStream network.Stream) {
 	// Some of this adapted from go-bitswap/network/ipfs_impl.go#handleNewStream
 	defer downStream.Close()
 
@@ -87,16 +98,14 @@ func handleDownStream(ha host.Host, wantMap *WantMap, downStream network.Stream)
 			return
 		}
 
-		// TODO Handle received.Haves(), received.DontHaves()
+		// TODO Handle received.Haves()
+		// TODO For received.DontHaves(), use GET /api/v0/refs?arg=CID&recursive=true to the downstream host
 		for _, block := range received.Blocks() {
 			cid := block.Cid()
-			upPeers := wantMap.GetValues(cid)
+			upPeers := connMgr.GetWantingPeers(cid)
 			log.Debugf("Received block %v wanted by %v\n", cid, upPeers)
 
-			for _, peerIf := range upPeers {
-				upPeer := peerIf.(peer.ID)
-				// TODO Do we really need to create a new stream per peer, or can we reuse the
-				// stream we already have (where the WANT message came from)?
+			for _, upPeer := range upPeers {
 				upStream, found := streamMap[upPeer]
 				if !found {
 					log.Debugf("Creating a new stream to %v\n", upPeer)
@@ -127,7 +136,7 @@ func handleDownStream(ha host.Host, wantMap *WantMap, downStream network.Stream)
 }
 
 // Handle an incoming stream from an upstream peer
-func handleUpStream(ha host.Host, downstreamCm *cm.Downstream, connMap *ConnMap, wantMap *WantMap, upStream network.Stream) {
+func handleUpStream(ha host.Host, connMgr *cm.ConnectionManager, upStream network.Stream) {
 	defer upStream.Close()
 
 	// Some of this adapted from go-bitswap/network/ipfs_impl.go#handleNewStream
@@ -135,18 +144,7 @@ func handleUpStream(ha host.Host, downstreamCm *cm.Downstream, connMap *ConnMap,
 	proto := upStream.Protocol()
 	reader := msgio.NewVarintReaderSize(upStream, network.MessageSizeMax)
 
-	downPeers := connMap.GetValues(upPeer)
-	var downPeer peer.ID
-
-	if len(downPeers) == 0 {
-		addr := downstreamCm.Next()
-		_, downPeer = peer.SplitAddr(addr)
-		log.Debugf("Downstream peer not found for upstream %v, connecting to %v\n", upPeer, downPeer)
-
-		connMap.Put(upPeer, downPeer)
-	} else {
-		downPeer = downPeers[0].(peer.ID)
-	}
+	downPeer := connMgr.GetDownstreamPeer(upPeer)
 
 	log.Debugf("\nOpening bitswap stream: %v: %v -> %v\n", proto, upPeer, downPeer)
 	downStream, err := ha.NewStream(context.Background(), downPeer, proto)
@@ -169,22 +167,25 @@ func handleUpStream(ha host.Host, downstreamCm *cm.Downstream, connMap *ConnMap,
 
 		wantlist := received.Wantlist()
 
+		// TODO Send the wants to all the downstream hosts? How do we handle DONT_HAVES then?
 		if received.Full() {
-			wantMap.DeleteValue(upPeer)
+			connMgr.RemoveWants(upPeer)
 
 			for _, want := range wantlist {
 				cid := want.Cid
-				wantMap.Put(cid, upPeer)
+				connMgr.AddWant(upPeer, cid)
 			}
 
 			// TODO Possible race condition: a peer sends a Full Wantlist while another peer sends
-			//      diff Wantlist.
+			//      diff Wantlist. Need higher-level locking on the wantlist, or send a diff with
+			//      just the new blocks. Sending Cancel messages would give us this race condition
+			//      again, though
 			// We will send a Full Wantlist, with everything that we want
 			msg := bsmsg.New(true)
 
-			for _, cid := range wantMap.Keys() {
+			for _, cid := range connMgr.GetWantedCids() {
 				// TODO Perhaps ask for a DONT_HAVE and process that via /api/v0/refs?
-				msg.AddEntry(cid.(icid.Cid), 0, bspb.Message_Wantlist_Block, false)
+				msg.AddEntry(cid, 0, bspb.Message_Wantlist_Block, false)
 			}
 
 			err = sendBitswapMessage(proto, msg, downStream)
@@ -197,13 +198,14 @@ func handleUpStream(ha host.Host, downstreamCm *cm.Downstream, connMap *ConnMap,
 				cid := want.Cid
 
 				if want.Cancel {
-					wantMap.DeleteKeyValue(cid, upPeer)
+					connMgr.RemoveWant(upPeer, cid)
 
 					// Check if any other peer wants this CID
-					wants := wantMap.GetValues(cid)
+					wants := connMgr.GetWantingPeers(cid)
 					log.Debugf("Peer %v does not want %v. It is now wanted by %v\n", upPeer, cid, wants)
 
 					if len(wants) == 0 {
+						// TODO Possible race condition: an upstream peer sends a Cancel while another one sends a Want
 						err = sendBitswapMessage(proto, received, downStream)
 						if err != nil {
 							log.Debugf("Error while sending Bitswap Cancel message to %v: %s", downStream, err)
@@ -212,8 +214,8 @@ func handleUpStream(ha host.Host, downstreamCm *cm.Downstream, connMap *ConnMap,
 					}
 				} else {
 					log.Debugf("Peer %v wants %v\n", upPeer, cid)
-					wantMap.Put(cid, upPeer)
-					log.Debugf("CID %v is now wanted by %v\n", cid, wantMap.GetValues(cid))
+					connMgr.AddWant(upPeer, cid)
+					log.Debugf("CID %v is now wanted by %v\n", cid, connMgr.GetWantingPeers(cid))
 
 					err = sendBitswapMessage(proto, received, downStream)
 					if err != nil {

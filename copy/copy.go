@@ -1,4 +1,4 @@
-package main
+package copy
 
 import (
 	"context"
@@ -9,26 +9,32 @@ import (
 
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
+
+	logging "github.com/ipfs/go-log/v2"
+
+	"github.com/mcamou/go-libp2p-kitsune/bitswap"
 	cm "github.com/mcamou/go-libp2p-kitsune/connection_manager"
 )
 
-func copyMatcher(proto string) bool {
+var log = logging.Logger("copy")
+
+// copyMatcher is a protocol matcher that matches those protocols that can be directly forwarded
+func CopyMatcher(proto string) bool {
 	// We ignore these protocols since they are either handled by specific protocol handlers
 	// or not used by the preloads.
 	// The protocol will ONLY be ignored if the value is `true`!
 	blocklist := map[string]bool{
-		"/ipfs/lan/kad/1.0.0":              true,
-		"/libp2p/autonat/1.0.0":            true,
-		"/libp2p/circuit/relay/0.1.0":      true,
-		"/libp2p/circuit/relay/0.2.0/stop": true,
-		"/libp2p/dcutr":                    true,
-		"/x/":                              true,
-		string(ProtocolBitswap):            true,
-		string(ProtocolBitswapOneOne):      true,
-		string(ProtocolBitswapOneZero):     true,
-		string(ProtocolBitswapNoVers):      true,
+		"/ipfs/lan/kad/1.0.0":                  true,
+		"/libp2p/autonat/1.0.0":                true,
+		"/libp2p/circuit/relay/0.1.0":          true,
+		"/libp2p/circuit/relay/0.2.0/stop":     true,
+		"/libp2p/dcutr":                        true,
+		"/x/":                                  true,
+		string(bitswap.ProtocolBitswap):        true,
+		string(bitswap.ProtocolBitswapOneOne):  true,
+		string(bitswap.ProtocolBitswapOneZero): true,
+		string(bitswap.ProtocolBitswapNoVers):  true,
 	}
 
 	if disabled, found := blocklist[proto]; !found && !disabled {
@@ -39,31 +45,20 @@ func copyMatcher(proto string) bool {
 	}
 }
 
-func copyHandler(ha host.Host, downCm *cm.Downstream, connMap *ConnMap) func(s network.Stream) {
+// copyHandler copies protocol messages back and forth between an upstream and a downstream host
+func CopyHandler(ha host.Host, connMgr *cm.ConnectionManager) func(s network.Stream) {
 	return func(upStream network.Stream) {
 		defer upStream.Close()
 
 		upPeer := upStream.Conn().RemotePeer()
 		proto := upStream.Protocol()
 
-		if downCm.ContainsPeer(upPeer) {
+		if connMgr.IsDownstreamPeer(upPeer) {
 			log.Warnf("Received non-bitswap stream %v from downstream peer %v\n. Bailing out.", proto, upPeer)
 			return
 		}
 
-		downPeers := connMap.GetKeys(upPeer)
-		var downPeer peer.ID
-
-		if len(downPeers) == 0 {
-			log.Debugf("Downstream peer not found for upstream %v, connecting to %v\n", upPeer, downPeer)
-
-			// For the moment just use round robin
-			addr := downCm.Next()
-			_, upPeer := peer.SplitAddr(addr)
-			connMap.Put(upPeer, downPeer)
-		} else {
-			downPeer = downPeers[0].(peer.ID)
-		}
+		downPeer := connMgr.GetDownstreamPeer(upPeer)
 
 		log.Debugf("Opening stream: %v: %v -> %v\n", proto, upPeer, downPeer)
 		downStream, err := ha.NewStream(context.Background(), downPeer, proto)
@@ -86,11 +81,10 @@ func copyHandler(ha host.Host, downCm *cm.Downstream, connMap *ConnMap) func(s n
 		case err := <-upCh:
 			log.Infof("Upstream channel %v: %v <- %v closed (error: %v)", proto, upPeer, downPeer, err)
 		}
-
-		// TODO Clean up the connMap if this is upPeer's last remaining stream
 	}
 }
 
+// copyStream copies all bytes from one stream to another
 func copyStream(proto protocol.ID, direction string, in network.Stream, out network.Stream, statusChar string, ch chan error) {
 	inPeer := in.Conn().RemotePeer()
 	outPeer := out.Conn().RemotePeer()

@@ -13,8 +13,8 @@ type BiMultiMap struct {
 	s       sync.RWMutex
 }
 
-// NewBiMultiMap creates a new, empty biMultiMap
-func NewBiMultiMap() *BiMultiMap {
+// New creates a new, empty biMultiMap
+func New() *BiMultiMap {
 	return &BiMultiMap{
 		forward: make(map[interface{}][]interface{}),
 		inverse: make(map[interface{}][]interface{}),

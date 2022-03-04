@@ -24,24 +24,23 @@ type Downstream struct {
 }
 
 // NewDownstream creates a new Downstream struct
-func NewDownstream(host host.Host, ctx context.Context, items ...ma.Multiaddr) (*Downstream, error) {
+func newDownstream(host host.Host, ctx context.Context, addrs ...ma.Multiaddr) *Downstream {
 	peers := make(map[ma.Multiaddr]bool)
+	peerRing := ring.New(len(addrs))
 
-	d := &Downstream{
-		host:     host,
-		ctx:      ctx,
-		peerRing: ring.New(len(items)),
-		peers:    peers,
+	for _, addr := range addrs {
+		peerRing.Value = addr
+		peerRing = peerRing.Next()
+
+		peers[addr] = true
 	}
 
-	for i := 0; i < d.peerRing.Len(); i++ {
-		d.peerRing.Value = items[i]
-		d.peerRing = d.peerRing.Next()
-
-		peers[items[i]] = true
+	return &Downstream{
+		host,
+		ctx,
+		peerRing,
+		peers,
 	}
-
-	return d, nil
 }
 
 // String gives a string representation of all the peers
@@ -56,21 +55,24 @@ func (d *Downstream) String() string {
 }
 
 // Next gets the next peer to connect to. At the moment it does round-robin
-func (d *Downstream) Next() ma.Multiaddr {
+func (d *Downstream) Next() peer.ID {
 	// Do we need locking? Worst thing that can happen is 2 or more upstream peers connect at the
 	// same time, they connect to the same downstream peer, and the next one gets skipped. I am
 	// not sure that the performance penalty for locking is actually worth it.
-	var addr ma.Multiaddr
+	var peerId peer.ID
 
 	// Save the current one in case no downstream hosts are available
 	current := d.peerRing.Value.(ma.Multiaddr)
+	log.Debugf("current: %s", current)
 
 	for {
-		addr = d.peerRing.Value.(ma.Multiaddr)
+		addr := d.peerRing.Value.(ma.Multiaddr)
 		d.peerRing = d.peerRing.Next()
 
-		_, peer := peer.SplitAddr(addr)
-		if d.host.Network().Connectedness(peer) == network.Connected {
+		_, peerId = peer.SplitAddr(addr)
+		log.Debugf("trying peer: %s", peerId)
+
+		if d.host.Network().Connectedness(peerId) == network.Connected {
 			break
 		} else if addr == current {
 			log.Warn("All downstream peers are disconnected. Waiting for a few seconds before retrying.")
@@ -79,7 +81,7 @@ func (d *Downstream) Next() ma.Multiaddr {
 		}
 
 	}
-	return addr
+	return peerId
 }
 
 // Contains returns true if the given multiaddr is one of the downstream peers
@@ -110,7 +112,7 @@ func (d *Downstream) Peers() []ma.Multiaddr {
 
 // ConnectAll connects to all the downstream peers and establishes a background goroutine
 // to reconnect when they disconnect
-func (d *Downstream) ConnectAll(h *host.Host, ctx context.Context, n *Notifiee) {
+func (d *Downstream) connectAll(n *Notifiee) {
 	d.host.Network().Notify(n)
 
 	d.peerRing.Do(func(target interface{}) {

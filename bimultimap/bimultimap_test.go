@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewBiMultiMap(t *testing.T) {
-	sut := NewBiMultiMap()
+	sut := New()
 	expected := &BiMultiMap{
 		forward: make(map[interface{}][]interface{}),
 		inverse: make(map[interface{}][]interface{}),
@@ -17,7 +17,7 @@ func TestNewBiMultiMap(t *testing.T) {
 }
 
 func TestBiMultiMapPut(t *testing.T) {
-	sut := NewBiMultiMap()
+	sut := New()
 	sut.Put("key", "value")
 
 	assert.True(t, sut.KeyExists("key"), "the key should exist")
@@ -28,7 +28,7 @@ func TestBiMultiMapPut(t *testing.T) {
 }
 
 func TestBiMultiMapPutDup(t *testing.T) {
-	sut := NewBiMultiMap()
+	sut := New()
 	sut.Put("key", "value")
 	sut.Put("key", "value")
 
@@ -52,7 +52,7 @@ func TestBiMultiMapMultiPut(t *testing.T) {
 }
 
 func TestBiMultiMapGetEmpty(t *testing.T) {
-	sut := NewBiMultiMap()
+	sut := New()
 	assert.Equal(t, []interface{}{}, sut.GetKeys("foo"), "a nonexistent key should return an empty slice")
 	assert.Equal(t, []interface{}{}, sut.GetValues("foo"), "a nonexistent value should return an empty slice")
 
@@ -62,7 +62,7 @@ func TestBiMultiMapGetEmpty(t *testing.T) {
 }
 
 func TestBiMultiMapDeleteKey(t *testing.T) {
-	sut := NewBiMultiMap()
+	sut := New()
 	sut.Put("key", "value")
 
 	value := sut.DeleteKey("key")
@@ -73,7 +73,7 @@ func TestBiMultiMapDeleteKey(t *testing.T) {
 }
 
 func TestBiMultiMapDeleteValue(t *testing.T) {
-	sut := NewBiMultiMap()
+	sut := New()
 	sut.Put("key", "value")
 
 	value := sut.DeleteValue("value")
@@ -134,7 +134,7 @@ func TestBiMultiMapKeysValues(t *testing.T) {
 }
 
 func biMultiMapWithMultipleKeysValues() *BiMultiMap {
-	m := NewBiMultiMap()
+	m := New()
 	m.Put("key1", "value1")
 	m.Put("key1", "value2")
 	m.Put("key2", "value1")

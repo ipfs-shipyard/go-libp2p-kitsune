@@ -2,15 +2,20 @@ package connection_manager
 
 import (
 	"github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/peer"
 	ma "github.com/multiformats/go-multiaddr"
+
+	bmm "github.com/mcamou/go-libp2p-kitsune/bimultimap"
 )
 
 type Notifiee struct {
-	down *Downstream
+	down    *Downstream
+	connMap *bmm.BiMultiMap
+	wantMap *bmm.BiMultiMap
 }
 
-func NewNotifiee(d *Downstream) *Notifiee {
-	return &Notifiee{down: d}
+func newNotifiee(down *Downstream, connMap *bmm.BiMultiMap, wantMap *bmm.BiMultiMap) *Notifiee {
+	return &Notifiee{down, connMap, wantMap}
 }
 
 func (n *Notifiee) Listen(net network.Network, addr ma.Multiaddr) { // called when network starts listening on an addr
@@ -31,13 +36,27 @@ func (n *Notifiee) Connected(net network.Network, conn network.Conn) { // called
 }
 
 func (n *Notifiee) Disconnected(net network.Network, conn network.Conn) { // called when a connection closed
-	peer := conn.RemotePeer()
-	info := n.down.host.Peerstore().PeerInfo(peer)
+	remotePeer := conn.RemotePeer()
+	info := n.down.host.Peerstore().PeerInfo(remotePeer)
 
-	if n.down.ContainsPeer(peer) {
+	if n.down.ContainsPeer(remotePeer) {
+		// Disconnect from all upstream peers that are associated with that downstream peer (they
+		// will reconnect and get assigned another one)
+		upPeers := n.connMap.DeleteValue(remotePeer)
+		for _, id := range upPeers {
+			n.down.host.Network().ClosePeer(id.(peer.ID))
+		}
+
+		// Delete all wants sent to that peer (upstream peers will re-request them after they reconnect)
+		n.wantMap.DeleteValue(remotePeer)
+
 		log.Debugf("Downstream peer %v disconnected, reconnecting", info.ID)
 		go n.down.connectLoop(info)
 	} else {
+		n.connMap.DeleteKey(remotePeer)
+
+		// Delete all wants from that peer (upstream peers will re-request them after they reconnect)
+		n.wantMap.DeleteKey(remotePeer)
 		log.Debugf("Upstream peer %v disconnected", info.ID)
 	}
 }
