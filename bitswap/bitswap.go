@@ -215,12 +215,20 @@ func handleWantlist(
 	upPeer peer.ID,
 	received bsmsg.BitSwapMessage,
 	downStream network.Stream) {
+	// TODO We need to lock the wantMap for 2 reasons:
+	//      1. An upstream peer sends a partial wantlist at the same time that another one sends a
+	//		   full one
+	//      2. An upstream peer sends a Cancel at the same time that another one sends a WANT
+	connMgr.LockWantMap()
+	defer connMgr.UnlockWantMap()
 
 	wantlist := received.Wantlist()
 
-	// TODO Send the wants to all the downstream hosts? How do we handle DONT_HAVES then?
+	// TODO Should we send the wants to all the downstream hosts? How do we handle DONT_HAVES then?
 	if received.Full() {
+
 		log.Debugf("peer %s full wantlist: %s", upPeer, wantlist)
+
 		connMgr.RemoveWants(upPeer)
 
 		for _, want := range wantlist {
@@ -229,10 +237,6 @@ func handleWantlist(
 		}
 
 		// We will send a Full Wantlist, with everything that we want
-		// TODO Possible race condition: a peer sends a Full Wantlist while another peer sends
-		//      diff Wantlist. Need higher-level locking on the wantlist, or send a diff with
-		//      just the new blocks. Sending a diff with Cancel messages would give us this race
-		// 		condition again, though
 		msg := bsmsg.New(true)
 
 		for _, cid := range connMgr.GetWantedCids() {
@@ -255,14 +259,13 @@ func handleWantlist(
 				connMgr.RemoveWant(upPeer, cid)
 
 				// Check if any other peer wants this CID
-				// TODO: This check is naive: it might be that some other peer wants it, but it's
-				//       associated with a different downstream peer. In that case we should send a
-				//       Cancel to this one.
+				// TODO This check is naive: some other peer might want it, but it's associated
+				//      with a different downstream peer. In that case we should send a Cancel
+				//      to this downstream peer.
 				wants := connMgr.GetWantingPeers(cid)
 				log.Debugf("Peer %v does not want %v. It is now wanted by %v", upPeer, cid, wants)
 
 				if len(wants) == 0 {
-					// TODO Possible race condition: an upstream peer sends a Cancel while another one sends a Want
 					err := sendBitswapMessage(proto, received, downStream)
 					if err != nil {
 						log.Debugf("Error while sending Bitswap Cancel message to %v: %s", downStream, err)

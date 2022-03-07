@@ -96,3 +96,11 @@ func (cm *ConnectionManager) RemoveWant(p peer.ID, c cid.Cid) {
 func (cm *ConnectionManager) RemoveWants(p peer.ID) {
 	cm.wantMap.DeleteKey(p)
 }
+
+func (cm *ConnectionManager) LockWantMap() {
+	cm.wantMap.Lock()
+}
+
+func (cm *ConnectionManager) UnlockWantMap() {
+	cm.wantMap.Unlock()
+}
