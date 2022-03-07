@@ -69,6 +69,7 @@ func newDownstream(host host.Host, ctx context.Context, addrs ...ma.Multiaddr) (
 }
 
 func getPeerInfo(httpAddr ma.Multiaddr) (*PeerInfo, error) {
+	// TODO ip6, dns4, dns6
 	ip, err := httpAddr.ValueForProtocol(ma.ProtocolWithName("ip4").Code)
 	if err != nil {
 		log.Errorf("Error while getting IP address for multiaddr %s: %s", httpAddr, err)
@@ -106,15 +107,15 @@ func getPeerInfo(httpAddr ma.Multiaddr) (*PeerInfo, error) {
 	found := false
 
 	for _, a := range idResp.Addresses {
-		// TODO This assumes that the original address matches the IP. Yes, very naive.
+		// TODO This assumes that our outgoing address matches the downstream peer's addresses. Yes,
+		//      very naive (see e.g. Docker or dns4)
 		if strings.Contains(a, ip) {
 			// TODO We get the first matching address, which might not be the best (e.g., tcp usually
 			// 		comes before quic)
-
 			addr, err = ma.NewMultiaddr(a)
 			if err != nil {
 				log.Errorf("Invalid multiaddr %s received from %s", httpAddr)
-				break
+				continue
 			}
 
 			found = true
@@ -229,7 +230,7 @@ func (d *Downstream) connectLoop(info peer.AddrInfo) {
 		}
 
 		log.Errorf("Failed to reconnect to downstream peer %v. Attempting reconnection. Error: %s", info, err)
-		// TODO Make configurable, perhaps backoff?
+		// TODO Make configurable, possibly backoff
 		time.Sleep(5 * time.Second)
 	}
 }

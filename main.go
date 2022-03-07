@@ -34,9 +34,7 @@ var log = logging.Logger("main")
 
 func main() {
 	// TODO get config from env vars / config file or both
-	// TODO To ensure that accessing /ipfs/v0/refs goes to the same host, we will need to also have our own HTTP
-	//      proxy. How do we map from remote HTTP address -> remote peer?
-	// TODO functional and performance tests!!!
+	// TODO functional and performance tests
 	// TODO Add metrics
 
 	// Command-line options
