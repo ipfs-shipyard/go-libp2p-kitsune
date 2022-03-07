@@ -16,13 +16,13 @@ import (
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
 
-	"github.com/mcamou/go-libp2p-kitsune/bitswap"
-	cm "github.com/mcamou/go-libp2p-kitsune/connection_manager"
-	"github.com/mcamou/go-libp2p-kitsune/copy"
-
 	logging "github.com/ipfs/go-log/v2"
 
 	ma "github.com/multiformats/go-multiaddr"
+
+	"github.com/mcamou/go-libp2p-kitsune/bitswap"
+	cm "github.com/mcamou/go-libp2p-kitsune/connection_manager"
+	"github.com/mcamou/go-libp2p-kitsune/copy"
 )
 
 type DownstreamHost struct {
@@ -38,13 +38,14 @@ func main() {
 	//      proxy. How do we map from remote HTTP address -> remote peer?
 	// TODO functional and performance tests!!!
 	// TODO Add metrics
+
 	// Command-line options
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	listenF := flag.String("l", "/ip4/0.0.0.0/tcp/0", "multiaddr to listen on (default: listen on all IPs on a random port)")
-	targetF := flag.String("d", "", "comma-separated list of downstream peer multiaddrs (mandatory)")
+	targetF := flag.String("d", "", "comma-separated list of downstream peer API port multiaddrs (mandatory)")
 	seedF := flag.Int64("s", 0, "set random seed for id generation. 0 means use a random number (default: 0)")
 	keyFileF := flag.String("k", "./key", "File to read/store key (default: ./key)")
 	flag.Parse()
@@ -90,7 +91,10 @@ func main() {
 	log.Info("Downstream hosts:")
 	printAddrs(targetAddrs, 4)
 
-	connMgr := cm.New(h, ctx, targetAddrs...)
+	connMgr, err := cm.New(h, ctx, targetAddrs...)
+	if err != nil {
+		log.Fatalf("Error while creating connection manager: %v\n", err)
+	}
 	connMgr.ConnectAllDown()
 
 	addHandlers(ctx, h, connMgr, *listenF)

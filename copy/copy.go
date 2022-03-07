@@ -58,7 +58,7 @@ func CopyHandler(ha host.Host, connMgr *cm.ConnectionManager) func(s network.Str
 			return
 		}
 
-		downPeer := connMgr.GetDownstreamPeer(upPeer)
+		downPeer := connMgr.GetDownstreamForPeer(upPeer)
 
 		log.Debugf("Opening stream: %v: %v -> %v\n", proto, upPeer, downPeer)
 		downStream, err := ha.NewStream(context.Background(), downPeer, proto)

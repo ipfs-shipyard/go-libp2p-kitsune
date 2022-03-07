@@ -3,7 +3,12 @@ package connection_manager
 import (
 	"container/ring"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	logging "github.com/ipfs/go-log/v2"
@@ -20,19 +25,39 @@ type Downstream struct {
 	host     host.Host
 	ctx      context.Context
 	peerRing *ring.Ring
-	peers    map[ma.Multiaddr]bool
+	peers    map[peer.ID]PeerInfo
+}
+
+type PeerInfo struct {
+	ID       peer.ID
+	Addr     ma.Multiaddr // Bitswap address
+	IP       string       // Or hostname
+	HttpPort uint16
+}
+
+func (pi *PeerInfo) String() string {
+	return fmt.Sprintf("%s(%s:%v)", pi.Addr, pi.IP, pi.HttpPort)
+}
+
+type IdResponse struct {
+	Addresses []string
 }
 
 // NewDownstream creates a new Downstream struct
-func newDownstream(host host.Host, ctx context.Context, addrs ...ma.Multiaddr) *Downstream {
-	peers := make(map[ma.Multiaddr]bool)
+func newDownstream(host host.Host, ctx context.Context, addrs ...ma.Multiaddr) (*Downstream, error) {
+	peers := make(map[peer.ID]PeerInfo)
 	peerRing := ring.New(len(addrs))
 
 	for _, addr := range addrs {
-		peerRing.Value = addr
+		peerInfo, err := getPeerInfo(addr)
+		if err != nil {
+			return nil, err
+		}
+
+		peerRing.Value = peerInfo.Addr
 		peerRing = peerRing.Next()
 
-		peers[addr] = true
+		peers[peerInfo.ID] = *peerInfo
 	}
 
 	return &Downstream{
@@ -40,7 +65,80 @@ func newDownstream(host host.Host, ctx context.Context, addrs ...ma.Multiaddr) *
 		ctx,
 		peerRing,
 		peers,
+	}, nil
+}
+
+func getPeerInfo(httpAddr ma.Multiaddr) (*PeerInfo, error) {
+	ip, err := httpAddr.ValueForProtocol(ma.ProtocolWithName("ip4").Code)
+	if err != nil {
+		log.Errorf("Error while getting IP address for multiaddr %s: %s", httpAddr, err)
+		return nil, err
 	}
+
+	portStr, err := httpAddr.ValueForProtocol(ma.ProtocolWithName("tcp").Code)
+	if err != nil {
+		log.Errorf("Error while getting TCP port for multiaddr %s: %s", httpAddr, err)
+		return nil, err
+	}
+
+	httpPort, err := strconv.ParseUint(portStr, 10, 16)
+	if err != nil {
+		log.Errorf("Error while getting TCP port for multiaddr %s: %s", portStr, err)
+		return nil, err
+	}
+
+	url := fmt.Sprintf("http://%s:%v/api/v0/id", ip, httpPort)
+	resp, err := http.Post(url, "application/json", nil)
+	if err != nil {
+		log.Errorf("Error while getting %s: %s", url, err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var idResp IdResponse
+	err = json.NewDecoder(resp.Body).Decode(&idResp)
+	if err != nil {
+		log.Errorf("Error while decoding JSON response from %s: %s", url, err)
+		return nil, err
+	}
+
+	var addr ma.Multiaddr
+	found := false
+
+	for _, a := range idResp.Addresses {
+		// TODO This assumes that the original address matches the IP. Yes, very naive.
+		if strings.Contains(a, ip) {
+			// TODO We get the first matching address, which might not be the best (e.g., tcp usually
+			// 		comes before quic)
+
+			addr, err = ma.NewMultiaddr(a)
+			if err != nil {
+				log.Errorf("Invalid multiaddr %s received from %s", httpAddr)
+				break
+			}
+
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		msg := fmt.Sprintf("Cannot find IP %s in the ID response from %s: %v", ip, httpAddr, idResp.Addresses)
+		log.Error(msg)
+		return nil, errors.New(msg)
+	}
+
+	_, id := peer.SplitAddr(addr)
+
+	peerInfo := &PeerInfo{
+		ID:       id,
+		Addr:     addr,
+		IP:       ip,
+		HttpPort: uint16(httpPort),
+	}
+
+	log.Debugf("Downstream host %s is %s", httpAddr, peerInfo.Addr)
+	return peerInfo, nil
 }
 
 // String gives a string representation of all the peers
@@ -86,24 +184,19 @@ func (d *Downstream) Next() peer.ID {
 
 // Contains returns true if the given multiaddr is one of the downstream peers
 func (d *Downstream) Contains(addr ma.Multiaddr) bool {
-	enabled, found := d.peers[addr]
-	return enabled && found
+	_, peerId := peer.SplitAddr(addr)
+	return d.ContainsPeer(peerId)
 }
 
 // ContainsPeer returns true if the given peer ID is one of the downstream peers
 func (d *Downstream) ContainsPeer(id peer.ID) bool {
-	for addr := range d.peers {
-		_, peerId := peer.SplitAddr(addr)
-		if id == peerId {
-			return true
-		}
-	}
-	return false
+	_, found := d.peers[id]
+	return found
 }
 
-// Peers returns a slice containing all the downstream peer multiaddrs
-func (d *Downstream) Peers() []ma.Multiaddr {
-	peers := make([]ma.Multiaddr, 0, len(d.peers))
+// Peers returns a slice containing all the downstream peer IDs
+func (d *Downstream) Peers() []peer.ID {
+	peers := make([]peer.ID, 0, len(d.peers))
 	for id := range d.peers {
 		peers = append(peers, id)
 	}
@@ -116,12 +209,11 @@ func (d *Downstream) connectAll(n *Notifiee) {
 	d.host.Network().Notify(n)
 
 	d.peerRing.Do(func(target interface{}) {
-		log.Debugf("Connecting to downstream peer %v", target)
 		peerInfo, err := peer.AddrInfoFromP2pAddr(target.(ma.Multiaddr))
 		if err != nil {
 			log.Errorf("Error while parsing multiaddr %s: %s", target, err)
 		} else {
-			log.Debugf("Connecting to peer %v", peerInfo)
+			log.Debugf("Connecting to downstream peer %s", target)
 			go d.connectLoop(*peerInfo)
 		}
 	})

@@ -61,10 +61,6 @@ func (n *Notifiee) Disconnected(net network.Network, conn network.Conn) { // cal
 	}
 }
 
-func (n *Notifiee) OpenedStream(net network.Network, s network.Stream) { // called when a stream opened
-	log.Debugf("Open stream to peer %s", s.Conn().RemotePeer())
-}
+func (n *Notifiee) OpenedStream(net network.Network, s network.Stream) {} // called when a stream opened
 
-func (n *Notifiee) ClosedStream(net network.Network, s network.Stream) { // called when a stream closed
-	log.Debugf("Closed stream to peer %s for protocol %s", s.Conn().RemotePeer(), s.Protocol())
-}
+func (n *Notifiee) ClosedStream(net network.Network, s network.Stream) {} // called when a stream closed

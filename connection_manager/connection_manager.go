@@ -19,12 +19,16 @@ type ConnectionManager struct {
 	wantMap *bmm.BiMultiMap // CID <-> PeerIDs with wants
 }
 
-func New(host host.Host, ctx context.Context, addrs ...ma.Multiaddr) *ConnectionManager {
-	down := newDownstream(host, ctx, addrs...)
+func New(host host.Host, ctx context.Context, addrs ...ma.Multiaddr) (*ConnectionManager, error) {
+	down, err := newDownstream(host, ctx, addrs...)
+	if err != nil {
+		return nil, err
+	}
+
 	connMap := bmm.New()
 	wantMap := bmm.New()
 
-	return &ConnectionManager{down, connMap, wantMap}
+	return &ConnectionManager{down, connMap, wantMap}, nil
 }
 
 func (cm *ConnectionManager) ConnectAllDown() {
@@ -36,7 +40,7 @@ func (cm *ConnectionManager) IsDownstreamPeer(id peer.ID) bool {
 	return cm.down.ContainsPeer(id)
 }
 
-func (cm *ConnectionManager) GetDownstreamPeer(upPeer peer.ID) peer.ID {
+func (cm *ConnectionManager) GetDownstreamForPeer(upPeer peer.ID) peer.ID {
 	downPeers := cm.connMap.GetValues(upPeer)
 
 	if len(downPeers) == 0 {
@@ -48,6 +52,14 @@ func (cm *ConnectionManager) GetDownstreamPeer(upPeer peer.ID) peer.ID {
 	} else {
 		return downPeers[0].(peer.ID)
 	}
+}
+
+func (cm *ConnectionManager) GetDownPeerInfo(id peer.ID) (PeerInfo, bool) {
+	elem, found := cm.down.peers[id]
+	if !found {
+		log.Debugf("downstream peer %s not found in %v", id, cm.down.peers)
+	}
+	return elem, found
 }
 
 // TODO Refactor these out to a separate Wantlist struct (the main problem is that the Notifiee needs the Wantlist)
@@ -78,7 +90,7 @@ func (cm *ConnectionManager) GetWantedCids() []cid.Cid {
 }
 
 func (cm *ConnectionManager) RemoveWant(p peer.ID, c cid.Cid) {
-	cm.wantMap.DeleteKeyValue(p, c)
+	cm.wantMap.DeleteKeyValue(c, p)
 }
 
 func (cm *ConnectionManager) RemoveWants(p peer.ID) {
