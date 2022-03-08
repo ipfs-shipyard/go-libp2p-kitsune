@@ -11,10 +11,10 @@ import (
 type Notifiee struct {
 	down    *Downstream
 	connMap *bmm.BiMultiMap
-	wantMap *bmm.BiMultiMap
+	wantMap *WantMap
 }
 
-func newNotifiee(down *Downstream, connMap *bmm.BiMultiMap, wantMap *bmm.BiMultiMap) *Notifiee {
+func newNotifiee(down *Downstream, connMap *bmm.BiMultiMap, wantMap *WantMap) *Notifiee {
 	return &Notifiee{down, connMap, wantMap}
 }
 
@@ -47,16 +47,13 @@ func (n *Notifiee) Disconnected(net network.Network, conn network.Conn) { // cal
 			n.down.host.Network().ClosePeer(id.(peer.ID))
 		}
 
-		// Delete all wants sent to that peer (upstream peers will re-request them after they reconnect)
-		n.wantMap.DeleteValue(remotePeer)
-
 		log.Debugf("Downstream peer %v disconnected, reconnecting", info.ID)
 		go n.down.connectLoop(info)
 	} else {
 		n.connMap.DeleteKey(remotePeer)
 
 		// Delete all wants from that peer (upstream peers will re-request them after they reconnect)
-		n.wantMap.DeleteKey(remotePeer)
+		n.wantMap.DeletePeer(remotePeer)
 		log.Debugf("Upstream peer %v disconnected", info.ID)
 	}
 }

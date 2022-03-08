@@ -53,7 +53,7 @@ func CopyHandler(ha host.Host, connMgr *cm.ConnectionManager) func(s network.Str
 		upPeer := upStream.Conn().RemotePeer()
 		proto := upStream.Protocol()
 
-		if connMgr.IsDownstreamPeer(upPeer) {
+		if connMgr.IsDownstream(upPeer) {
 			log.Warnf("Received non-bitswap stream %v from downstream peer %v\n. Bailing out.", proto, upPeer)
 			return
 		}

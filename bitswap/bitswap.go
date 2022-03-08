@@ -61,7 +61,7 @@ func bitswapHandler(ha host.Host, connMgr *cm.ConnectionManager) func(s network.
 
 		defer inStream.Close()
 
-		if connMgr.IsDownstreamPeer(inPeer) {
+		if connMgr.IsDownstream(inPeer) {
 			handleDownStream(ha, connMgr, inStream)
 		} else {
 			handleUpStream(ha, connMgr, inStream)
@@ -116,7 +116,7 @@ func handleBlocks(
 	// TODO Should we cache the blocks for a short time in case we get a WANT for one of them?
 	for _, block := range (*received).Blocks() {
 		cid := block.Cid()
-		upPeers := connMgr.GetWantingPeers(cid)
+		upPeers := connMgr.WantMap().GetPeers(cid)
 		log.Debugf("Received block %v wanted by %v", cid, upPeers)
 
 		for _, upPeer := range upPeers {
@@ -219,8 +219,8 @@ func handleWantlist(
 	//      1. An upstream peer sends a partial wantlist at the same time that another one sends a
 	//		   full one
 	//      2. An upstream peer sends a Cancel at the same time that another one sends a WANT
-	connMgr.LockWantMap()
-	defer connMgr.UnlockWantMap()
+	connMgr.WantMap().Lock()
+	defer connMgr.WantMap().Unlock()
 
 	wantlist := received.Wantlist()
 
@@ -229,17 +229,17 @@ func handleWantlist(
 
 		log.Debugf("peer %s full wantlist: %s", upPeer, wantlist)
 
-		connMgr.RemoveWants(upPeer)
+		connMgr.WantMap().DeletePeer(upPeer)
 
 		for _, want := range wantlist {
 			cid := want.Cid
-			connMgr.AddWant(upPeer, cid)
+			connMgr.WantMap().Add(upPeer, cid)
 		}
 
 		// We will send a Full Wantlist, with everything that we want
 		msg := bsmsg.New(true)
 
-		for _, cid := range connMgr.GetWantedCids() {
+		for _, cid := range connMgr.WantMap().GetCids() {
 			msg.AddEntry(cid, 0, bspb.Message_Wantlist_Block, true)
 		}
 
@@ -256,13 +256,13 @@ func handleWantlist(
 			cid := want.Cid
 
 			if want.Cancel {
-				connMgr.RemoveWant(upPeer, cid)
+				connMgr.WantMap().Delete(upPeer, cid)
 
 				// Check if any other peer wants this CID
 				// TODO This check is naive: some other peer might want it, but it's associated
 				//      with a different downstream peer. In that case we should send a Cancel
 				//      to this downstream peer.
-				wants := connMgr.GetWantingPeers(cid)
+				wants := connMgr.WantMap().GetPeers(cid)
 				log.Debugf("Peer %v does not want %v. It is now wanted by %v", upPeer, cid, wants)
 
 				if len(wants) == 0 {
@@ -275,8 +275,8 @@ func handleWantlist(
 			}
 
 			log.Debugf("peer %s wants %s", upPeer, want)
-			connMgr.AddWant(upPeer, cid)
-			log.Debugf("Peer %v wants %v, now wanted by %v", upPeer, cid, connMgr.GetWantingPeers(cid))
+			connMgr.WantMap().Add(upPeer, cid)
+			log.Debugf("Peer %v wants %v, now wanted by %v", upPeer, cid, connMgr.WantMap().GetPeers(cid))
 
 			// Ask for a DONT_HAVE so handleDontHave kicks in if the downstream peer does not have it
 			msg.AddEntry(cid, 0, bspb.Message_Wantlist_Block, true)
