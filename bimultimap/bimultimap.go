@@ -234,7 +234,7 @@ func deleteElement(slice []interface{}, element interface{}) []interface{} {
 
 // Helper function: read-lock the BiMultiMap if it's not already locked
 func (m *BiMultiMap) rLock() {
-	if !m.readLocked {
+	if !m.readLocked && !m.writeLocked {
 		m.mutex.RLock()
 	}
 }
@@ -248,7 +248,7 @@ func (m *BiMultiMap) lock() {
 
 // Helper function: unlock the BiMultiMap from a ReadLock if it wasn't previously read-locked
 func (m *BiMultiMap) rUnlock() {
-	if !m.readLocked {
+	if !m.readLocked && !m.writeLocked {
 		m.mutex.RUnlock()
 	}
 }

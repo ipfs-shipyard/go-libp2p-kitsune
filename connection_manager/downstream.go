@@ -183,6 +183,13 @@ func (d *Downstream) Next() peer.ID {
 	return peerId
 }
 
+// Current returns the current downstream peer in the list
+func (d *Downstream) Current() peer.ID {
+	addr := d.peerRing.Value.(ma.Multiaddr)
+	_, peerId := peer.SplitAddr(addr)
+	return peerId
+}
+
 // Contains returns true if the given multiaddr is one of the downstream peers
 func (d *Downstream) Contains(addr ma.Multiaddr) bool {
 	_, peerId := peer.SplitAddr(addr)
@@ -204,6 +211,15 @@ func (d *Downstream) Peers() []peer.ID {
 	return peers
 }
 
+// PeerAddrs returns a slice containing all the downstream peer bitswap multiaddrs
+func (d *Downstream) PeerAddrs() []ma.Multiaddr {
+	addrs := make([]ma.Multiaddr, 0, len(d.peers))
+	for _, info := range d.peers {
+		addrs = append(addrs, info.Addr)
+	}
+	return addrs
+}
+
 // ConnectAll connects to all the downstream peers and establishes a background goroutine
 // to reconnect when they disconnect
 func (d *Downstream) connectAll(n *Notifiee) {
@@ -222,7 +238,7 @@ func (d *Downstream) connectAll(n *Notifiee) {
 
 // connectLoop is a goroutine that periodically tries to connect to a disconnected peer
 func (d *Downstream) connectLoop(info peer.AddrInfo) {
-	log.Debug("Starting reconnection loop for peer", info)
+	log.Debugf("Starting reconnection loop for downstream peer %s", info)
 	for {
 		err := d.host.Connect(d.ctx, info)
 		if err == nil {

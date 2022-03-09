@@ -32,12 +32,12 @@ var (
 	ProtocolBitswap protocol.ID = "/ipfs/bitswap/1.2.0"
 )
 
-func AddBitswapHandler(h host.Host, connMgr *cm.ConnectionManager) {
+func AddBitswapHandler(h host.Host, connMgr *cm.ConnectionManager, enablePreload bool) {
 	// It would be nice to make this more generic (i.e. adding other protocols)
-	h.SetStreamHandler(ProtocolBitswap, bitswapHandler(h, connMgr))
-	h.SetStreamHandler(ProtocolBitswapOneOne, bitswapHandler(h, connMgr))
-	h.SetStreamHandler(ProtocolBitswapOneZero, bitswapHandler(h, connMgr))
-	h.SetStreamHandler(ProtocolBitswapNoVers, bitswapHandler(h, connMgr))
+	h.SetStreamHandler(ProtocolBitswap, bitswapHandler(h, connMgr, enablePreload))
+	h.SetStreamHandler(ProtocolBitswapOneOne, bitswapHandler(h, connMgr, enablePreload))
+	h.SetStreamHandler(ProtocolBitswapOneZero, bitswapHandler(h, connMgr, enablePreload))
+	h.SetStreamHandler(ProtocolBitswapNoVers, bitswapHandler(h, connMgr, enablePreload))
 }
 
 // Stream handler for the /ipfs/bitswap/* protocols
@@ -55,24 +55,23 @@ func AddBitswapHandler(h host.Host, connMgr *cm.ConnectionManager) {
 // Some open questions:
 //   - Do we need to create a new stream to the upstream peer or can we reuse the one we already have?
 //   - If so, do we need to create a new stream for each block?
-func bitswapHandler(ha host.Host, connMgr *cm.ConnectionManager) func(s network.Stream) {
+func bitswapHandler(ha host.Host, connMgr *cm.ConnectionManager, enablePreload bool) func(s network.Stream) {
 	return func(inStream network.Stream) {
 		inPeer := inStream.Conn().RemotePeer()
 
 		defer inStream.Close()
 
 		if connMgr.IsDownstream(inPeer) {
-			handleDownStream(ha, connMgr, inStream)
+			handleDownStream(ha, connMgr, enablePreload, inStream)
 		} else {
-			handleUpStream(ha, connMgr, inStream)
+			handleUpStream(ha, connMgr, enablePreload, inStream)
 		}
 
 	}
 }
 
-// Handle an incoming stream from a from a downstream peer (which will usually be in reply to a
-// WANT message from an upstream peer)
-func handleDownStream(ha host.Host, connMgr *cm.ConnectionManager, downStream network.Stream) {
+// Handle an incoming stream from a from a downstream peer
+func handleDownStream(ha host.Host, connMgr *cm.ConnectionManager, enablePreload bool, downStream network.Stream) {
 	// Some of this adapted from go-bitswap/network/ipfs_impl.go#handleNewStream
 	defer downStream.Close()
 
@@ -99,9 +98,77 @@ func handleDownStream(ha host.Host, connMgr *cm.ConnectionManager, downStream ne
 			return
 		}
 
-		// TODO Handle received.Haves()
-		handleBlocks(ha, connMgr, proto, &streamMap, &received)
+		handleBlocks(ha, connMgr, proto, &streamMap, connMgr.UpstreamWantMap(), &received)
 		handleDontHaves(connMgr, &received, downPeer)
+		// TODO Handle received.Haves()
+
+		// Downstream peers send WANTs in response to /api/v0/refs (only when preloads enabled)
+		// Since ATM we don't know which upstream peer sent the /api/v0/refs request, we send
+		// the WANT to all of them
+		if enablePreload {
+			// TODO This list might be large, we need to optimize by batching and/or weeding out
+			//      the peer list, probably by IP (since we don't know which peer the request to
+			//      /api/v0/refs came from)
+			upPeers := connMgr.UpPeers()
+			log.Debugf("Forwarding wantlist to upstream peers %s", upPeers)
+			streams := make([]network.Stream, 0, len(upPeers))
+			for _, peer := range upPeers {
+				stream, err := ha.NewStream(context.Background(), peer, proto)
+				if err != nil {
+					log.Errorf("Error creating stream to upstream %s: %s", peer, err)
+				}
+				streams = append(streams, stream)
+			}
+			handleWantlist(connMgr, proto, downPeer, received, connMgr.DownstreamWantMap(), streams)
+		}
+	}
+}
+
+// Handle an incoming stream from an upstream peer
+func handleUpStream(ha host.Host, connMgr *cm.ConnectionManager, enablePreload bool, upStream network.Stream) {
+	defer upStream.Close()
+
+	// Some of this adapted from go-bitswap/network/ipfs_impl.go#handleNewStream
+	upPeer := upStream.Conn().RemotePeer()
+	proto := upStream.Protocol()
+	reader := msgio.NewVarintReaderSize(upStream, network.MessageSizeMax)
+
+	downPeer := connMgr.GetDownstreamForPeer(upPeer)
+
+	log.Debugf("Opening bitswap stream from upstream: %v: %v -> %v", proto, upPeer, downPeer)
+	downStream, err := ha.NewStream(context.Background(), downPeer, proto)
+	if err != nil {
+		log.Warnf("Error creating stream %v: %v -> %v: %s", proto, upPeer, downPeer, err)
+		return
+	}
+
+	for {
+		received, err := bsmsg.FromMsgReader(reader)
+
+		if err != nil {
+			if err != io.EOF {
+				_ = upStream.Reset()
+				log.Warnf("bitswapHandler from %s error: %s", upPeer, err)
+			}
+			return
+		}
+
+		streams := []network.Stream{downStream}
+		handleWantlist(connMgr, proto, upPeer, received, connMgr.UpstreamWantMap(), streams)
+
+		// Upstream peers send BLOCKS in response to the WANTs sent by the downstream peers in
+		// response to /api/v0/refs (see above in handleWantlist). We just forward them to the
+		// corresponding downstream peer.
+		if enablePreload {
+			streamMap := make(map[peer.ID]network.Stream)
+			handleBlocks(ha, connMgr, proto, &streamMap, connMgr.DownstreamWantMap(), &received)
+		}
+
+		for cid := range received.DontHaves() {
+			log.Debugf("Upstream peer %s does not have %s", upPeer, cid)
+		}
+
+		// We don't care about DONT_HAVEs from upstream
 	}
 }
 
@@ -110,17 +177,23 @@ func handleBlocks(
 	connMgr *cm.ConnectionManager,
 	proto protocol.ID,
 	streamMap *map[peer.ID]network.Stream,
+	wantMap *cm.WantMap,
 	received *bsmsg.BitSwapMessage) {
 	var err error
 
 	// TODO Should we cache the blocks for a short time in case we get a WANT for one of them?
 	for _, block := range (*received).Blocks() {
 		cid := block.Cid()
-		upPeers := connMgr.WantMap().GetPeers(cid)
+		upPeers := wantMap.GetPeers(cid)
 		log.Debugf("Received block %v wanted by %v", cid, upPeers)
 
 		for _, upPeer := range upPeers {
-			upStream, found := (*streamMap)[upPeer]
+			var upStream network.Stream
+			found := false
+
+			if streamMap != nil {
+				upStream, found = (*streamMap)[upPeer]
+			}
 			if !found {
 				log.Debugf("Creating a new stream to %v", upPeer)
 
@@ -130,7 +203,9 @@ func handleBlocks(
 					continue
 				}
 
-				(*streamMap)[upPeer] = upStream
+				if streamMap != nil {
+					(*streamMap)[upPeer] = upStream
+				}
 			}
 
 			// Sending the blocks one by one is slower but simpler and uses less memory, since each
@@ -140,6 +215,7 @@ func handleBlocks(
 			msg := bsmsg.New(false)
 			msg.AddBlock(block)
 
+			log.Debugf("Sending block %s to %s", cid, upPeer)
 			err = sendBitswapMessage(proto, msg, upStream)
 			if err != nil {
 				log.Warnf("Error while sending Bitswap message to %v: %v", upPeer, err)
@@ -164,146 +240,108 @@ func handleDontHaves(connMgr *cm.ConnectionManager, received *bsmsg.BitSwapMessa
 
 	for _, cid := range (*received).DontHaves() {
 		log.Debugf("Downstream peer %s does not have %s", downPeer, cid)
-		// TODO Do these in parallel. Also, should we preemptively do it as part of WANT handling?
-		url := fmt.Sprintf("http://%s:%v/api/v0/refs?recursive=true&cid=%s", peerInfo.IP, peerInfo.HttpPort, cid)
-		resp, err := http.Get(url)
+
+		// TODO Do these in parallel. Should we preemptively do it as part of WANT handling?
+		url := fmt.Sprintf("http://%s:%v/api/v0/refs?recursive=true&arg=%s", peerInfo.IP, peerInfo.HttpPort, cid)
+		resp, err := http.Post(url, "application/json", nil)
 		if err != nil || (*resp).StatusCode > 299 {
 			log.Warnf("HTTP error while fetching %s: %s (error %s)", url, (*resp).StatusCode, err)
 			continue
 		}
-		// TODO Do we need to issue the WANT again, perhaps after some time so the host has a
-		// 		chance to get the blocks, or will the upstream node do it?
-	}
-}
-
-// Handle an incoming stream from an upstream peer
-func handleUpStream(ha host.Host, connMgr *cm.ConnectionManager, upStream network.Stream) {
-	defer upStream.Close()
-
-	// Some of this adapted from go-bitswap/network/ipfs_impl.go#handleNewStream
-	upPeer := upStream.Conn().RemotePeer()
-	proto := upStream.Protocol()
-	reader := msgio.NewVarintReaderSize(upStream, network.MessageSizeMax)
-
-	downPeer := connMgr.GetDownstreamForPeer(upPeer)
-
-	log.Debugf("Opening bitswap stream: %v: %v -> %v", proto, upPeer, downPeer)
-	downStream, err := ha.NewStream(context.Background(), downPeer, proto)
-	if err != nil {
-		log.Warnf("Error creating stream %v: %v -> %v: %s", proto, upPeer, downPeer, err)
-		return
-	}
-
-	for {
-		received, err := bsmsg.FromMsgReader(reader)
-
-		if err != nil {
-			if err != io.EOF {
-				_ = upStream.Reset()
-				log.Warnf("bitswapHandler from %s error: %s", upPeer, err)
-			}
-			return
-		}
-
-		handleWantlist(connMgr, proto, upPeer, received, downStream)
 	}
 }
 
 func handleWantlist(
 	connMgr *cm.ConnectionManager,
 	proto protocol.ID,
-	upPeer peer.ID,
+	sourcePeerID peer.ID,
 	received bsmsg.BitSwapMessage,
-	downStream network.Stream) {
-	// TODO We need to lock the wantMap for 2 reasons:
-	//      1. An upstream peer sends a partial wantlist at the same time that another one sends a
-	//		   full one
-	//      2. An upstream peer sends a Cancel at the same time that another one sends a WANT
-	connMgr.WantMap().Lock()
-	defer connMgr.WantMap().Unlock()
+	wantMap *cm.WantMap,
+	destStreams []network.Stream) {
+	// We need to lock the wantMap for 2 reasons:
+	// 1. A peer sends a partial wantlist at the same time that another one sends a full one
+	// 2. A peer sends a Cancel at the same time that another one sends a WANT
+	wantMap.Lock()
+	defer wantMap.Unlock()
 
 	wantlist := received.Wantlist()
 
 	// TODO Should we send the wants to all the downstream hosts? How do we handle DONT_HAVES then?
 	if received.Full() {
+		log.Debugf("peer %s full wantlist: %s", sourcePeerID, wantlist)
 
-		log.Debugf("peer %s full wantlist: %s", upPeer, wantlist)
-
-		connMgr.WantMap().DeletePeer(upPeer)
+		wantMap.DeletePeer(sourcePeerID)
 
 		for _, want := range wantlist {
 			cid := want.Cid
-			connMgr.WantMap().Add(upPeer, cid)
+			wantMap.Add(sourcePeerID, cid)
 		}
 
 		// We will send a Full Wantlist, with everything that we want
 		msg := bsmsg.New(true)
-
-		for _, cid := range connMgr.WantMap().GetCids() {
+		for _, cid := range wantMap.GetCids() {
 			msg.AddEntry(cid, 0, bspb.Message_Wantlist_Block, true)
 		}
 
-		err := sendBitswapMessage(proto, msg, downStream)
-		if err != nil {
-			log.Warnf("Error while sending Bitswap Full Want message to %v: %v", downStream, err)
-			return
-		}
+		log.Debugf("Sending full wantlist msg: %s", msg)
+		sendBitswapMessages(proto, msg, destStreams)
 	} else {
 		msg := bsmsg.New(false)
 
 		for _, want := range wantlist {
-			log.Debugf("peer %s wants %s", upPeer, want)
 			cid := want.Cid
 
 			if want.Cancel {
-				connMgr.WantMap().Delete(upPeer, cid)
+				wantMap.Delete(sourcePeerID, cid)
 
-				// Check if any other peer wants this CID
+				// Cancel the WANT if nobody wants it
 				// TODO This check is naive: some other peer might want it, but it's associated
 				//      with a different downstream peer. In that case we should send a Cancel
 				//      to this downstream peer.
-				wants := connMgr.WantMap().GetPeers(cid)
-				log.Debugf("Peer %v does not want %v. It is now wanted by %v", upPeer, cid, wants)
+				wants := wantMap.GetPeers(cid)
+				log.Debugf("Peer %v does not want %v. It is now wanted by %v", sourcePeerID, cid, wants)
 
 				if len(wants) == 0 {
-					err := sendBitswapMessage(proto, received, downStream)
-					if err != nil {
-						log.Debugf("Error while sending Bitswap Cancel message to %v: %s", downStream, err)
-					}
+					msg := bsmsg.New(false)
+					msg.Cancel(cid)
+					sendBitswapMessages(proto, msg, destStreams)
 				}
-				continue
+			} else {
+				wantMap.Add(sourcePeerID, cid)
+				log.Debugf("Peer %v wants %v, now wanted by %v", sourcePeerID, cid, wantMap.GetPeers(cid))
+
+				// Ask for a DONT_HAVE so handleDontHave kicks in if the downstream peer does not have it
+				msg.AddEntry(cid, 0, bspb.Message_Wantlist_Block, true)
 			}
-
-			log.Debugf("peer %s wants %s", upPeer, want)
-			connMgr.WantMap().Add(upPeer, cid)
-			log.Debugf("Peer %v wants %v, now wanted by %v", upPeer, cid, connMgr.WantMap().GetPeers(cid))
-
-			// Ask for a DONT_HAVE so handleDontHave kicks in if the downstream peer does not have it
-			msg.AddEntry(cid, 0, bspb.Message_Wantlist_Block, true)
 		}
 
-		err := sendBitswapMessage(proto, msg, downStream)
-		if err != nil {
-			log.Warnf("Error while sending Bitswap Want message to %v: %s", downStream, err)
-		}
+		sendBitswapMessages(proto, msg, destStreams)
+	}
+}
+
+// Sends a bitswap message to multiple streams
+func sendBitswapMessages(proto protocol.ID, msg bsmsg.BitSwapMessage, streams []network.Stream) {
+	for _, s := range streams {
+		sendBitswapMessage(proto, msg, s)
 	}
 }
 
 // Convert the message to the appropriate protocol version and resend it on a stream
 func sendBitswapMessage(proto protocol.ID, msg bsmsg.BitSwapMessage, s network.Stream) error {
+	log.Debugf("Sending bitswap message to %s: %s", s.Conn().RemotePeer(), msg)
 	switch proto {
 	case ProtocolBitswapOneOne, ProtocolBitswap:
 		if err := msg.ToNetV1(s); err != nil {
-			log.Warnf("Error sending Bitswap 1.1 message: %s", err)
+			log.Warnf("Error sending Bitswap 1.1 message to peer %s: %s", s.Conn().RemotePeer(), err)
 			return err
 		}
 	case ProtocolBitswapOneZero, ProtocolBitswapNoVers:
 		if err := msg.ToNetV0(s); err != nil {
-			log.Warnf("Error sending Bitswap 1.0 message: %s", err)
+			log.Warnf("Error sending Bitswap 1.0 message to peer %s: %s", s.Conn().RemotePeer(), err)
 			return err
 		}
 	default:
-		return fmt.Errorf("unrecognized protocol on remote: %s", s.Protocol())
+		return fmt.Errorf("Unrecognized protocol %s", proto)
 	}
 	return nil
 }

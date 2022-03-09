@@ -11,7 +11,7 @@ type WantMap struct {
 	wantMap *bmm.BiMultiMap
 }
 
-func newWantMap() *WantMap {
+func NewWantMap() *WantMap {
 	return &WantMap{wantMap: bmm.New()}
 }
 

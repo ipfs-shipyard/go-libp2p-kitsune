@@ -1,6 +1,8 @@
 package connection_manager
 
 import (
+	"fmt"
+
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	ma "github.com/multiformats/go-multiaddr"
@@ -28,10 +30,21 @@ func (n *Notifiee) ListenClose(net network.Network, addr ma.Multiaddr) { // call
 
 func (n *Notifiee) Connected(net network.Network, conn network.Conn) { // called when a connection opened
 	peer := conn.RemotePeer()
+	p := fmt.Sprintf("/p2p/%s", peer)
+	addr, err := ma.NewMultiaddr(p)
+	if err != nil {
+		log.Errorf("Invalid multiaddr %s", p)
+		return
+	}
+
+	remoteAddr := conn.RemoteMultiaddr().Encapsulate(addr)
+
 	if n.down.ContainsPeer(peer) {
-		log.Debugf("Connected to downstream peer: %s", conn.RemoteMultiaddr())
+		log.Debugf("Connected to downstream peer %s", remoteAddr)
 	} else {
-		log.Debugf("Connected to upstream peer: %s", conn.RemoteMultiaddr())
+		downPeer := n.down.Next()
+		n.connMap.Put(peer, downPeer)
+		log.Debugf("Connected to upstream peer %s <-> %s", peer, downPeer)
 	}
 }
 
@@ -53,6 +66,7 @@ func (n *Notifiee) Disconnected(net network.Network, conn network.Conn) { // cal
 		n.connMap.DeleteKey(remotePeer)
 
 		// Delete all wants from that peer (upstream peers will re-request them after they reconnect)
+		// TODO Send Cancels for all CIDS to all downstream peers
 		n.wantMap.DeletePeer(remotePeer)
 		log.Debugf("Upstream peer %v disconnected", info.ID)
 	}
