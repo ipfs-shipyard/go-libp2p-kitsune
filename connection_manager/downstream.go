@@ -107,7 +107,7 @@ func getPeerInfo(httpAddr ma.Multiaddr) (*PeerInfo, error) {
 	found := false
 
 	for _, a := range idResp.Addresses {
-		// TODO This assumes that our outgoing address matches the downstream peer's addresses. Yes,
+		// TODO This assumes that the remote address matches the downstream peer's addresses. Yes,
 		//      very naive (see e.g. Docker or dns4)
 		if strings.Contains(a, ip) {
 			// TODO We get the first matching address, which might not be the best (e.g., tcp usually

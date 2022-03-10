@@ -1,5 +1,7 @@
 // Package bimultimap is a thread-safe bidirectional MultiMap. It associates a key with multiple
 // values and each value with its corresponding keys.
+// TODO Move to its own repo
+// TODO Move to go 1.18 and generics
 package bimultimap
 
 import (
@@ -25,8 +27,8 @@ func New() *BiMultiMap {
 	}
 }
 
-// GetValues gets the values associated with a key, or an empty slice if the key does not exist
-func (m *BiMultiMap) GetValues(key interface{}) []interface{} {
+// LookupKey gets the values associated with a key, or an empty slice if the key does not exist
+func (m *BiMultiMap) LookupKey(key interface{}) []interface{} {
 	m.rLock()
 	defer m.rUnlock()
 
@@ -37,8 +39,8 @@ func (m *BiMultiMap) GetValues(key interface{}) []interface{} {
 	return values
 }
 
-// GetKeys gets the keys associated with a value, or an empty slice if the value does not exist
-func (m *BiMultiMap) GetKeys(value interface{}) []interface{} {
+// LookupValue gets the keys associated with a value, or an empty slice if the value does not exist
+func (m *BiMultiMap) LookupValue(value interface{}) []interface{} {
 	m.rLock()
 	defer m.rUnlock()
 

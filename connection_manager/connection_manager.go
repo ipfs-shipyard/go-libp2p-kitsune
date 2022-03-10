@@ -40,8 +40,8 @@ func (cm *ConnectionManager) IsDownstream(id peer.ID) bool {
 	return cm.down.ContainsPeer(id)
 }
 
-func (cm *ConnectionManager) GetDownstreamForPeer(upPeer peer.ID) peer.ID {
-	downPeers := cm.connMap.GetValues(upPeer)
+func (cm *ConnectionManager) DownstreamForPeer(upPeer peer.ID) peer.ID {
+	downPeers := cm.connMap.LookupKey(upPeer)
 
 	if len(downPeers) == 0 {
 		downPeer := cm.down.Next()
@@ -54,11 +54,11 @@ func (cm *ConnectionManager) GetDownstreamForPeer(upPeer peer.ID) peer.ID {
 	}
 }
 
-func (cm *ConnectionManager) GetCurrentDownPeer() peer.ID {
+func (cm *ConnectionManager) CurrentDownPeer() peer.ID {
 	return cm.down.Current()
 }
 
-func (cm *ConnectionManager) GetDownPeerInfo(id peer.ID) (PeerInfo, bool) {
+func (cm *ConnectionManager) DownPeerInfo(id peer.ID) (PeerInfo, bool) {
 	elem, found := cm.down.peers[id]
 	if !found {
 		log.Debugf("downstream peer %s not found in %v", id, cm.down.peers)

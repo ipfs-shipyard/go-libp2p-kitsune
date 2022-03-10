@@ -15,8 +15,8 @@ func NewWantMap() *WantMap {
 	return &WantMap{wantMap: bmm.New()}
 }
 
-func (wm *WantMap) GetPeers(c cid.Cid) []peer.ID {
-	values := wm.wantMap.GetValues(c)
+func (wm *WantMap) PeersForCid(c cid.Cid) []peer.ID {
+	values := wm.wantMap.LookupKey(c)
 	peers := make([]peer.ID, 0, len(values))
 
 	for _, p := range values {
@@ -26,7 +26,7 @@ func (wm *WantMap) GetPeers(c cid.Cid) []peer.ID {
 	return peers
 }
 
-func (wm *WantMap) GetCids() []cid.Cid {
+func (wm *WantMap) AllCids() []cid.Cid {
 	keys := wm.wantMap.Keys()
 	cids := make([]cid.Cid, 0, len(keys))
 

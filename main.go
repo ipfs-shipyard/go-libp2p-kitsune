@@ -34,9 +34,9 @@ type DownstreamHost struct {
 var log = logging.Logger("main")
 
 func main() {
-	// TODO get config from env vars / config file or both
-	// TODO functional and performance tests
-	// TODO Add metrics
+	// TODO get config from env vars / config file or both (see e.g. https://github.com/spf13/viper)
+	// TODO functional and performance tests (see https://github.com/mcamou/js-ipfs-preload-tester/tree/update-ipfs)
+	// TODO Add metrics (see https://prometheus.io/docs/guides/go-application/)
 
 	// Command-line options
 
@@ -233,8 +233,10 @@ func preloadRefsHandler(connMgr *cm.ConnectionManager) func(w http.ResponseWrite
 		log.Debugf("IP %s requested %v", remoteIP, cid)
 
 		// TODO Optimize downstream want handling
-		// Figure out if we already have downstream node(s) assigned to this IP
-		//   - This might be the UpstreamWantMap
+		// - Figure out if we already have a peer with this IP in the connMap
+		// - Figure out if we already have downstream node(s) assigned to this IP and/or
+		//   if we already have a WANT out for this CID
+		//     - This might be the DownstreamWantMap
 		// Otherwise assign a new downstream node to this IP
 		// Forward the /api/v0/refs call to the downstream node. With the reply:
 		//   - Forward to the upstream node
@@ -247,9 +249,9 @@ func preloadRefsHandler(connMgr *cm.ConnectionManager) func(w http.ResponseWrite
 		if found {
 			// We don't know which downstream peer this peer is associated with, so just
 			// grab the current one (perhaps a random one would be better?)
-			peerId := connMgr.GetCurrentDownPeer()
+			peerId := connMgr.CurrentDownPeer()
 
-			peerInfo, found := connMgr.GetDownPeerInfo(peerId)
+			peerInfo, found := connMgr.DownPeerInfo(peerId)
 			if !found {
 				log.Errorf("Peer %s not found in downstream peers, not sending refs request", peerId)
 				return
