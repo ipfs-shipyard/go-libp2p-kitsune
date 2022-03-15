@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-// A thread-safe bidirectional multimap where neither the keys nor the values need to be unique
+// BiMultiMap is a thread-safe bidirectional multimap where neither the keys nor the values need to be unique
 type BiMultiMap struct {
 	forward     map[interface{}][]interface{}
 	inverse     map[interface{}][]interface{}
@@ -52,8 +52,8 @@ func (m *BiMultiMap) LookupValue(value interface{}) []interface{} {
 	return keys
 }
 
-// Put adds a key/value pair
-func (m *BiMultiMap) Put(key interface{}, value interface{}) {
+// Add adds a key/value pair
+func (m *BiMultiMap) Add(key interface{}, value interface{}) {
 	m.lock()
 	defer m.unlock()
 
@@ -161,6 +161,15 @@ func (m *BiMultiMap) DeleteKeyValue(key interface{}, value interface{}) {
 			delete(m.inverse, value)
 		}
 	}
+}
+
+// Clear clears all entries in the BiMultiMap
+func (m *BiMultiMap) Clear() {
+	m.lock()
+	defer m.unlock()
+
+	m.forward = make(map[interface{}][]interface{})
+	m.inverse = make(map[interface{}][]interface{})
 }
 
 // Keys returns an unordered slice containing all of the map's keys

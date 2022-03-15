@@ -21,7 +21,7 @@ func TestNewBiMultiMap(t *testing.T) {
 
 func TestBiMultiMapPut(t *testing.T) {
 	sut := New()
-	sut.Put("key", "value")
+	sut.Add("key", "value")
 
 	assert.True(t, sut.KeyExists("key"), "the key should exist")
 	assert.Equal(t, []interface{}{"value"}, sut.LookupKey("key"), "the value associated with the key should be the correct one")
@@ -32,8 +32,8 @@ func TestBiMultiMapPut(t *testing.T) {
 
 func TestBiMultiMapPutDup(t *testing.T) {
 	sut := New()
-	sut.Put("key", "value")
-	sut.Put("key", "value")
+	sut.Add("key", "value")
+	sut.Add("key", "value")
 
 	assert.True(t, sut.KeyExists("key"), "the key should exist")
 	assert.Equal(t, []interface{}{"value"}, sut.LookupKey("key"), "the value associated with the key should not be duplicated")
@@ -59,14 +59,14 @@ func TestBiMultiMapGetEmpty(t *testing.T) {
 	assert.Equal(t, []interface{}{}, sut.LookupValue("foo"), "a nonexistent key should return an empty slice")
 	assert.Equal(t, []interface{}{}, sut.LookupKey("foo"), "a nonexistent value should return an empty slice")
 
-	sut.Put("key", "value")
+	sut.Add("key", "value")
 	assert.Equal(t, []interface{}{}, sut.LookupValue("foo"), "a nonexistent key should return an empty slice")
 	assert.Equal(t, []interface{}{}, sut.LookupKey("foo"), "a nonexistent value should return an empty slice")
 }
 
 func TestBiMultiMapDeleteKey(t *testing.T) {
 	sut := New()
-	sut.Put("key", "value")
+	sut.Add("key", "value")
 
 	value := sut.DeleteKey("key")
 
@@ -77,7 +77,7 @@ func TestBiMultiMapDeleteKey(t *testing.T) {
 
 func TestBiMultiMapDeleteValue(t *testing.T) {
 	sut := New()
-	sut.Put("key", "value")
+	sut.Add("key", "value")
 
 	value := sut.DeleteValue("value")
 
@@ -119,7 +119,7 @@ func TestMultiMapDeleteKeyValue(t *testing.T) {
 
 func TestBiMultiMapKeysValues(t *testing.T) {
 	sut := biMultiMapWithMultipleKeysValues()
-	sut.Put("key3", "value3")
+	sut.Add("key3", "value3")
 
 	keys := sut.Keys()
 	values := sut.Values()
@@ -144,13 +144,13 @@ func TestBiMultiMapWriteLock(t *testing.T) {
 		assert.Truef(t, sut.IsLocked(), "Lock() should lock the BiMultiMap for writing")
 
 		time.Sleep(50 * time.Millisecond)
-		sut.Put("key1", "value1")
+		sut.Add("key1", "value1")
 		time.Sleep(50 * time.Millisecond)
-		sut.Put("key1", "value2")
+		sut.Add("key1", "value2")
 		time.Sleep(50 * time.Millisecond)
-		sut.Put("key2", "value1")
+		sut.Add("key2", "value1")
 		time.Sleep(50 * time.Millisecond)
-		sut.Put("key2", "value2")
+		sut.Add("key2", "value2")
 		time.Sleep(50 * time.Millisecond)
 
 		sut.Unlock()
@@ -182,6 +182,14 @@ func TestBiMultiMapWriteLock(t *testing.T) {
 	assert.Equal(t, expected, sut, "Lock() should lock the BiMultiMap for writing and RLock() for reading")
 }
 
+func TestBiMultiMapClear(t *testing.T) {
+	sut := biMultiMapWithMultipleKeysValues()
+	sut.Clear()
+
+	assert.Equal(t, []interface{}{}, sut.Keys())
+	assert.Equal(t, []interface{}{}, sut.Values())
+}
+
 func TestBiMultiMapReadLock(t *testing.T) {
 	sut := New()
 
@@ -191,13 +199,13 @@ func TestBiMultiMapReadLock(t *testing.T) {
 		assert.Falsef(t, sut.IsRLocked(), "Lock() should not lock the BiMultiMap for reading")
 
 		time.Sleep(50 * time.Millisecond)
-		sut.Put("key1", "value1")
+		sut.Add("key1", "value1")
 		time.Sleep(50 * time.Millisecond)
-		sut.Put("key1", "value2")
+		sut.Add("key1", "value2")
 		time.Sleep(50 * time.Millisecond)
-		sut.Put("key2", "value1")
+		sut.Add("key2", "value1")
 		time.Sleep(50 * time.Millisecond)
-		sut.Put("key2", "value2")
+		sut.Add("key2", "value2")
 		time.Sleep(50 * time.Millisecond)
 
 		sut.Unlock()
@@ -215,10 +223,10 @@ func TestBiMultiMapReadLock(t *testing.T) {
 
 func biMultiMapWithMultipleKeysValues() *BiMultiMap {
 	m := New()
-	m.Put("key1", "value1")
-	m.Put("key1", "value2")
-	m.Put("key2", "value1")
-	m.Put("key2", "value2")
+	m.Add("key1", "value1")
+	m.Add("key1", "value2")
+	m.Add("key2", "value1")
+	m.Add("key2", "value2")
 
 	return m
 }
