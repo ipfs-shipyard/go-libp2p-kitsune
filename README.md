@@ -61,7 +61,8 @@ file from a different go-ipfs node by proxying via the downstream node.
 
 ## Compiling
 
-Just run `go-build`
+Just run `go build`. You will need Go 1.17 (this is tested on 1.17.8). A `.tool-versions`
+file is included if you use `asdf`.
 
 ## Running
 
@@ -69,20 +70,21 @@ The binary is called `go-libp2p-kitsune` and accepts the following flags:
 
 `-d` (mandatory) Comma-separated list of downstream go-ipfs node API port multiaddrs
      (e.g. `/ip4/10.0.1.42/tcp/5002,/ip4/10.0.5.3/tcp/5002`). The backing go-ipfs
-     nodes must allow access to the `/api/v0/id` and `/api/v0/refs`.
+     nodes must allow access to the `/api/v0/id` and `/api/v0/refs` GRPC endpoints.
 
 `-l` (optional) Multiaddr to listen on for TCP/UDP traffic (e.g. `/ip4/127.0.0.1/tcp/4001`).
      IP `0.0.0.0` means listening on all available IP addresses. The default is `/ip4/0.0.0.0/tcp/0`
-     (all IP addresses, random port)
+     (all IP addresses, random port).
 
 `-w` (optional in normal mode, mandatory in preload mode) Multiaddr to listen
-     on for WebSocket traffic, with or without the `/ws` protocol (e.g. `/ip4/127.0.0.1/tcp/8080`).
-     IP `0.0.0.0` means listening on all available IP addresses. The default is `/ip4/0.0.0.0/tcp/0`
-     (all IP addresses, random port)
+     on for WebSocket traffic, with or without the `/ws` protocol (e.g. `/ip4/127.0.0.1/tcp/8080`
+     or `/ip4/127.0.0.1/tcp/8080/ws`). IP `0.0.0.0` means listening on all available
+     IP addresses. The default is `/ip4/0.0.0.0/tcp/0` (all IP addresses, random
+     port).
 
 `-k` (optional) Name of the keyfile. When Kitsune starts up the first time it will
      store its private key in this file. The next times it will read this file
-     to get its identity/private key
+     to get its identity/private key.
 
 `-p` (optional) Enable preload mode and indicate the preload API port (see below)
 
