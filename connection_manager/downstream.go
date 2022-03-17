@@ -68,12 +68,18 @@ func newDownstream(host host.Host, ctx context.Context, addrs ...ma.Multiaddr) (
 	}, nil
 }
 
+// getPeerInfo returns the details of a peer given its API multiaddr, using /api/v0/id to get
+// the info. The multiaddr must be /ip4 (not yet ip6 nor DNS)
 func getPeerInfo(httpAddr ma.Multiaddr) (*PeerInfo, error) {
-	// TODO ip6, dns4, dns6
 	ip, err := httpAddr.ValueForProtocol(ma.ProtocolWithName("ip4").Code)
 	if err != nil {
-		log.Errorf("Error while getting IP address for multiaddr %s: %s", httpAddr, err)
-		return nil, err
+		ip4Err := err
+		ip, err = httpAddr.ValueForProtocol(ma.ProtocolWithName("ip6").Code)
+		if err != nil {
+			log.Errorf("Error while getting IP address for multiaddr %s: %s\n%s", httpAddr, ip4Err, err)
+			return nil, err
+		}
+		ip = "[" + ip + "]"
 	}
 
 	portStr, err := httpAddr.ValueForProtocol(ma.ProtocolWithName("tcp").Code)
@@ -107,11 +113,14 @@ func getPeerInfo(httpAddr ma.Multiaddr) (*PeerInfo, error) {
 	found := false
 
 	for _, a := range idResp.Addresses {
-		// TODO This assumes that the remote address matches the downstream peer's addresses. Yes,
-		//      very naive (see e.g. Docker or dns4)
+		// TODO This assumes that our remote address matches the downstream peer's known addresses,
+		//      which might not be the case if we're connecting via /dns4 or to an IPFS node inside
+		//      a Docker container or behind a firewall, and it hasn't yet figured out its external
+		//      IP. It might be best to just extract the port from the multiaddrs and use the
+		//      IP that we already have.
 		if strings.Contains(a, ip) {
-			// TODO We get the first matching address, which might not be the best (e.g., tcp usually
-			// 		comes before quic)
+			// TODO We get the first matching multiaddr, which might not be the best (e.g., tcp
+			//      usually comes before quic)
 			addr, err = ma.NewMultiaddr(a)
 			if err != nil {
 				log.Errorf("Invalid multiaddr %s received from %s", httpAddr)

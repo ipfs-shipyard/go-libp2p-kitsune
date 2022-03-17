@@ -6,9 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
-	"net"
-	"net/http"
 	"os"
 	"strings"
 
@@ -26,16 +23,11 @@ import (
 	"github.com/mcamou/go-libp2p-kitsune/copy"
 )
 
-type DownstreamHost struct {
-	ipfs_multiaddr ma.Multiaddr
-	api_port       uint64
-}
-
 var log = logging.Logger("main")
 
 func main() {
-	// TODO get config from env vars / config file or both (see e.g. https://github.com/spf13/viper)
-	// TODO functional and performance tests (see https://github.com/mcamou/js-ipfs-preload-tester/tree/update-ipfs)
+	// TODO Get config from env vars / config file or both (see e.g. https://github.com/spf13/viper)
+	// TODO Functional and performance tests (see https://github.com/mcamou/js-ipfs-preload-tester/tree/update-ipfs)
 	// TODO Add metrics (see https://prometheus.io/docs/guides/go-application/)
 
 	// Command-line options
@@ -122,17 +114,15 @@ func main() {
 	log.Info("Downstream hosts:")
 	printAddrs(connMgr.DownPeers(), 4)
 
-	addHandlers(ctx, h, connMgr, preloadEnabled)
+	addProtoHandlers(ctx, h, connMgr, preloadEnabled)
 
 	if preloadEnabled {
-		startPreload(connMgr, *preloadF)
+		startPreloadHandler(connMgr, *preloadF)
 	}
 	log.Infof("Listening for bitswap connections on %s\n", h.Network().ListenAddresses()[0])
 
 	// Run until canceled.
 	<-ctx.Done()
-
-	// TODO Send WANT cancels for all wanted CIDs to all downstream peers, and intercept SIGINT
 }
 
 func getPrivateKey(keyFile string) (crypto.PrivKey, error) {
@@ -172,6 +162,8 @@ func getPrivateKey(keyFile string) (crypto.PrivKey, error) {
 }
 
 func makeHost(listenAddr ma.Multiaddr, wsAddr *ma.Multiaddr, priv crypto.PrivKey) (host.Host, error) {
+	// TODO The PeerID is currently encoded as CIDv0. This is OK for the preloads but not for the
+	//      general use case of replacing any go-ipfs node.
 	opts := []libp2p.Option{
 		libp2p.ListenAddrs(listenAddr),
 		libp2p.Identity(priv),
@@ -188,7 +180,7 @@ func makeHost(listenAddr ma.Multiaddr, wsAddr *ma.Multiaddr, priv crypto.PrivKey
 	return ha, err
 }
 
-func addHandlers(ctx context.Context, h host.Host, connMgr *cm.ConnectionManager, enablePreload bool) {
+func addProtoHandlers(ctx context.Context, h host.Host, connMgr *cm.ConnectionManager, enablePreload bool) {
 	// Protocols that we handle ourselves
 	ping.NewPingService(h)
 
@@ -196,7 +188,7 @@ func addHandlers(ctx context.Context, h host.Host, connMgr *cm.ConnectionManager
 	bitswap.AddBitswapHandler(h, connMgr, enablePreload)
 
 	// Generic handler for any other protocols
-	h.SetStreamHandlerMatch("", copy.CopyMatcher, copy.CopyHandler(h, connMgr))
+	h.SetStreamHandlerMatch("", copy.Matcher, copy.Handler(h, connMgr))
 }
 
 func getHostAddresses(h host.Host) []ma.Multiaddr {
@@ -216,77 +208,4 @@ func printAddrs(addrs []ma.Multiaddr, indent int) {
 	for _, elem := range addrs {
 		log.Infof("%s%s", strings.Repeat(" ", indent), elem)
 	}
-}
-
-func startPreload(connMgr *cm.ConnectionManager, port uint64) {
-	portStr := fmt.Sprintf(":%v", port)
-	log.Infof("Preload mode enabled with API port %v", port)
-	http.HandleFunc("/api/v0/refs", preloadRefsHandler(connMgr))
-	http.ListenAndServe(portStr, nil)
-}
-
-func preloadRefsHandler(connMgr *cm.ConnectionManager) func(w http.ResponseWriter, r *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		cid, found := r.URL.Query()["arg"]
-
-		remoteIP := getRemoteIP(r)
-		log.Debugf("IP %s requested %v", remoteIP, cid)
-
-		// TODO Optimize downstream want handling
-		// - Figure out if we already have a peer with this IP in the connMap
-		// - Figure out if we already have downstream node(s) assigned to this IP and/or
-		//   if we already have a WANT out for this CID
-		//     - This might be the DownstreamWantMap
-		// Otherwise assign a new downstream node to this IP
-		// Forward the /api/v0/refs call to the downstream node. With the reply:
-		//   - Forward to the upstream node
-		//   - Parse it and add the CIDs to the UpstreamWantMap - it will have to map
-		//     downstreamPeer <-> upstreamIP, and then in bitswap we need to figure out
-		//     the peerID
-
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-
-		if found {
-			// We don't know which downstream peer this peer is associated with, so just
-			// grab the current one (perhaps a random one would be better?)
-			peerId := connMgr.CurrentDownPeer()
-
-			peerInfo, found := connMgr.DownPeerInfo(peerId)
-			if !found {
-				log.Errorf("Peer %s not found in downstream peers, not sending refs request", peerId)
-				return
-			}
-
-			url := fmt.Sprintf("http://%s:%v/api/v0/refs?recursive=true&arg=%s", peerInfo.IP, peerInfo.HttpPort, cid[0])
-			log.Debugf("Fetching %s", url)
-
-			// TODO Stream response
-			resp, err := http.Post(url, "application/json", nil)
-			if err != nil {
-				log.Errorf("HTTP error while fetching %s", err)
-				return
-			}
-
-			io.Copy(w, resp.Body)
-		}
-	}
-}
-
-func getRemoteIP(r *http.Request) net.IP {
-	var remoteIP string
-	if len(r.Header.Get("X-Forwarded-For")) > 1 {
-		// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For
-		remoteIP = r.Header.Get("X-Forwarded-For")
-		if strings.Contains(remoteIP, ",") {
-			remoteIP = strings.Split(remoteIP, ",")[0]
-		}
-	} else {
-		if strings.Contains(r.RemoteAddr, ":") {
-			remoteIP = strings.Split(r.RemoteAddr, ":")[0]
-		} else {
-			remoteIP = r.RemoteAddr
-		}
-	}
-
-	return net.ParseIP(remoteIP)
 }

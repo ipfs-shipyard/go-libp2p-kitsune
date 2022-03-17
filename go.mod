@@ -112,7 +112,7 @@ require (
 	github.com/ipfs/go-block-format v0.0.3 // indirect
 	github.com/ipfs/go-cid v0.0.7
 	github.com/ipfs/go-log/v2 v2.5.0
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.7.1
 )
 
 require (

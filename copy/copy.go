@@ -19,8 +19,8 @@ import (
 
 var log = logging.Logger("copy")
 
-// copyMatcher is a protocol matcher that matches those protocols that can be directly forwarded
-func CopyMatcher(proto string) bool {
+// Matcher is a protocol matcher that matches those protocols that can be directly forwarded
+func Matcher(proto string) bool {
 	// We ignore these protocols since they are either handled by specific protocol handlers
 	// or not used by the preloads.
 	// The protocol will ONLY be ignored if the value is `true`!
@@ -45,8 +45,8 @@ func CopyMatcher(proto string) bool {
 	}
 }
 
-// copyHandler copies protocol messages back and forth between an upstream and a downstream host
-func CopyHandler(ha host.Host, connMgr *cm.ConnectionManager) func(s network.Stream) {
+// Handler copies protocol messages back and forth between an upstream and a downstream host
+func Handler(ha host.Host, connMgr *cm.ConnectionManager) func(s network.Stream) {
 	return func(upStream network.Stream) {
 		defer upStream.Close()
 
@@ -58,7 +58,7 @@ func CopyHandler(ha host.Host, connMgr *cm.ConnectionManager) func(s network.Str
 			return
 		}
 
-		downPeer := connMgr.DownstreamForPeer(upPeer)
+		downPeer := connMgr.DownstreamForPeer(upPeer)[0]
 
 		log.Debugf("Opening stream: %v: %v -> %v\n", proto, upPeer, downPeer)
 		downStream, err := ha.NewStream(context.Background(), downPeer, proto)
@@ -90,7 +90,7 @@ func copyStream(proto protocol.ID, direction string, in network.Stream, out netw
 	outPeer := out.Conn().RemotePeer()
 
 	// TODO Tune buffering
-	buf := make([]byte, 1024)
+	buf := make([]byte, 1024*1024)
 	written := int64(0)
 	var err error
 
