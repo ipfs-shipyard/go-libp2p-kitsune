@@ -163,6 +163,33 @@ func (m *BiMultiMap) DeleteKeyValue(key interface{}, value interface{}) {
 	}
 }
 
+// Merge merges two BiMultiMaps: returns a new BiMultiMap consisting of all the key/value pairs in
+// this one and all key/value pairs in the other one
+func (m *BiMultiMap) Merge(other *BiMultiMap) *BiMultiMap {
+	m.rLock()
+	other.rLock()
+	defer func() {
+		other.rUnlock()
+		m.rUnlock()
+	}()
+
+	res := New()
+
+	for _, k := range m.Keys() {
+		for _, v := range m.LookupKey(k) {
+			res.Add(k, v)
+		}
+	}
+
+	for _, k := range other.Keys() {
+		for _, v := range other.LookupKey(k) {
+			res.Add(k, v)
+		}
+	}
+
+	return res
+}
+
 // Clear clears all entries in the BiMultiMap
 func (m *BiMultiMap) Clear() {
 	m.lock()

@@ -1,7 +1,6 @@
 package bimultimap
 
 import (
-	"sort"
 	"testing"
 	"time"
 
@@ -24,10 +23,10 @@ func TestBiMultiMapPut(t *testing.T) {
 	sut.Add("key", "value")
 
 	assert.True(t, sut.KeyExists("key"), "the key should exist")
-	assert.Equal(t, []interface{}{"value"}, sut.LookupKey("key"), "the value associated with the key should be the correct one")
+	assert.ElementsMatch(t, []interface{}{"value"}, sut.LookupKey("key"), "the value associated with the key should be the correct one")
 
 	assert.True(t, sut.ValueExists("value"), "the value should exist")
-	assert.Equal(t, []interface{}{"key"}, sut.LookupValue("value"), "the key associated with the value should be the correct one")
+	assert.ElementsMatch(t, []interface{}{"key"}, sut.LookupValue("value"), "the key associated with the value should be the correct one")
 }
 
 func TestBiMultiMapPutDup(t *testing.T) {
@@ -36,10 +35,10 @@ func TestBiMultiMapPutDup(t *testing.T) {
 	sut.Add("key", "value")
 
 	assert.True(t, sut.KeyExists("key"), "the key should exist")
-	assert.Equal(t, []interface{}{"value"}, sut.LookupKey("key"), "the value associated with the key should not be duplicated")
+	assert.ElementsMatch(t, []interface{}{"value"}, sut.LookupKey("key"), "the value associated with the key should not be duplicated")
 
 	assert.True(t, sut.ValueExists("value"), "the value should exist")
-	assert.Equal(t, []interface{}{"key"}, sut.LookupValue("value"), "the key associated with the value should not be duplicated")
+	assert.ElementsMatch(t, []interface{}{"key"}, sut.LookupValue("value"), "the key associated with the value should not be duplicated")
 }
 
 func TestBiMultiMapMultiPut(t *testing.T) {
@@ -47,21 +46,21 @@ func TestBiMultiMapMultiPut(t *testing.T) {
 
 	assert.True(t, sut.KeyExists("key1"), "key1 should exist")
 	assert.True(t, sut.KeyExists("key2"), "key2 should exist")
-	assert.Equal(t, []interface{}{"value1", "value2"}, sut.LookupKey("key1"), "the values associated with the key should be the correct one")
+	assert.ElementsMatch(t, []interface{}{"value1", "value2"}, sut.LookupKey("key1"), "the values associated with the key should be the correct one")
 
 	assert.True(t, sut.ValueExists("value1"), "value1 should exist")
 	assert.True(t, sut.ValueExists("value2"), "value2 should exist")
-	assert.Equal(t, []interface{}{"key1", "key2"}, sut.LookupValue("value1"), "the keys associated with the value should be the correct one")
+	assert.ElementsMatch(t, []interface{}{"key1", "key2"}, sut.LookupValue("value1"), "the keys associated with the value should be the correct one")
 }
 
 func TestBiMultiMapGetEmpty(t *testing.T) {
 	sut := New()
-	assert.Equal(t, []interface{}{}, sut.LookupValue("foo"), "a nonexistent key should return an empty slice")
-	assert.Equal(t, []interface{}{}, sut.LookupKey("foo"), "a nonexistent value should return an empty slice")
+	assert.ElementsMatch(t, []interface{}{}, sut.LookupValue("foo"), "a nonexistent key should return an empty slice")
+	assert.ElementsMatch(t, []interface{}{}, sut.LookupKey("foo"), "a nonexistent value should return an empty slice")
 
 	sut.Add("key", "value")
-	assert.Equal(t, []interface{}{}, sut.LookupValue("foo"), "a nonexistent key should return an empty slice")
-	assert.Equal(t, []interface{}{}, sut.LookupKey("foo"), "a nonexistent value should return an empty slice")
+	assert.ElementsMatch(t, []interface{}{}, sut.LookupValue("foo"), "a nonexistent key should return an empty slice")
+	assert.ElementsMatch(t, []interface{}{}, sut.LookupKey("foo"), "a nonexistent value should return an empty slice")
 }
 
 func TestBiMultiMapDeleteKey(t *testing.T) {
@@ -70,9 +69,9 @@ func TestBiMultiMapDeleteKey(t *testing.T) {
 
 	value := sut.DeleteKey("key")
 
-	assert.Equal(t, []interface{}{}, sut.LookupKey("key"), "deleting a key should delete it")
-	assert.Equal(t, []interface{}{}, sut.LookupValue("value"), "a deleted key should delete its values")
-	assert.Equal(t, []interface{}{"value"}, value, "deleting a key should return its associated values")
+	assert.ElementsMatch(t, []interface{}{}, sut.LookupKey("key"), "deleting a key should delete it")
+	assert.ElementsMatch(t, []interface{}{}, sut.LookupValue("value"), "a deleted key should delete its values")
+	assert.ElementsMatch(t, []interface{}{"value"}, value, "deleting a key should return its associated values")
 }
 
 func TestBiMultiMapDeleteValue(t *testing.T) {
@@ -81,9 +80,9 @@ func TestBiMultiMapDeleteValue(t *testing.T) {
 
 	value := sut.DeleteValue("value")
 
-	assert.Equal(t, []interface{}{}, sut.LookupKey("key"), "deleting a value should delete it")
-	assert.Equal(t, []interface{}{}, sut.LookupValue("value"), "a deleted value should delete its keys")
-	assert.Equal(t, []interface{}{"key"}, value, "deleting a value should return its associated keys")
+	assert.ElementsMatch(t, []interface{}{}, sut.LookupKey("key"), "deleting a value should delete it")
+	assert.ElementsMatch(t, []interface{}{}, sut.LookupValue("value"), "a deleted value should delete its keys")
+	assert.ElementsMatch(t, []interface{}{"key"}, value, "deleting a value should return its associated keys")
 }
 
 func TestBiMultiMapDeleteMultiKey(t *testing.T) {
@@ -91,9 +90,9 @@ func TestBiMultiMapDeleteMultiKey(t *testing.T) {
 
 	sut.DeleteKey("key1")
 
-	assert.Equal(t, []interface{}{}, sut.LookupKey("key1"), "deleting a key should delete all its values")
-	assert.Equal(t, []interface{}{"value1", "value2"}, sut.LookupKey("key2"), "deleting a key should only delete its own values")
-	assert.Equal(t, []interface{}{"key2"}, sut.LookupValue("value1"), "deleting a key should delete the inverse")
+	assert.ElementsMatch(t, []interface{}{}, sut.LookupKey("key1"), "deleting a key should delete all its values")
+	assert.ElementsMatch(t, []interface{}{"value1", "value2"}, sut.LookupKey("key2"), "deleting a key should only delete its own values")
+	assert.ElementsMatch(t, []interface{}{"key2"}, sut.LookupValue("value1"), "deleting a key should delete the inverse")
 }
 
 func TestBiMultiMapDeleteMultiValue(t *testing.T) {
@@ -101,9 +100,9 @@ func TestBiMultiMapDeleteMultiValue(t *testing.T) {
 
 	sut.DeleteValue("value1")
 
-	assert.Equal(t, []interface{}{}, sut.LookupValue("value1"), "deleting a value should delete all its keys")
-	assert.Equal(t, []interface{}{"key1", "key2"}, sut.LookupValue("value2"), "deleting a value should only delete its own keys")
-	assert.Equal(t, []interface{}{"value2"}, sut.LookupKey("key1"), "deleting a value should delete the inverse")
+	assert.ElementsMatch(t, []interface{}{}, sut.LookupValue("value1"), "deleting a value should delete all its keys")
+	assert.ElementsMatch(t, []interface{}{"key1", "key2"}, sut.LookupValue("value2"), "deleting a value should only delete its own keys")
+	assert.ElementsMatch(t, []interface{}{"value2"}, sut.LookupKey("key1"), "deleting a value should delete the inverse")
 }
 
 func TestMultiMapDeleteKeyValue(t *testing.T) {
@@ -111,10 +110,10 @@ func TestMultiMapDeleteKeyValue(t *testing.T) {
 
 	sut.DeleteKeyValue("key1", "value1")
 
-	assert.Equal(t, []interface{}{"value2"}, sut.LookupKey("key1"), "deleting a key/value pair should delete only that key/value pair from its key")
-	assert.Equal(t, []interface{}{"value1", "value2"}, sut.LookupKey("key2"), "deleting a key/value pair should not affect other keys")
-	assert.Equal(t, []interface{}{"key2"}, sut.LookupValue("value1"), "deleting a key/value pair delete only that key/value pair from its value")
-	assert.Equal(t, []interface{}{"key1", "key2"}, sut.LookupValue("value2"), "deleting a key/value pair should not affect other values")
+	assert.ElementsMatch(t, []interface{}{"value2"}, sut.LookupKey("key1"), "deleting a key/value pair should delete only that key/value pair from its key")
+	assert.ElementsMatch(t, []interface{}{"value1", "value2"}, sut.LookupKey("key2"), "deleting a key/value pair should not affect other keys")
+	assert.ElementsMatch(t, []interface{}{"key2"}, sut.LookupValue("value1"), "deleting a key/value pair delete only that key/value pair from its value")
+	assert.ElementsMatch(t, []interface{}{"key1", "key2"}, sut.LookupValue("value2"), "deleting a key/value pair should not affect other values")
 }
 
 func TestBiMultiMapKeysValues(t *testing.T) {
@@ -124,16 +123,8 @@ func TestBiMultiMapKeysValues(t *testing.T) {
 	keys := sut.Keys()
 	values := sut.Values()
 
-	sort.Slice(keys, func(i, j int) bool {
-		return keys[i].(string) < keys[j].(string)
-	})
-
-	sort.Slice(values, func(i, j int) bool {
-		return values[i].(string) < values[j].(string)
-	})
-
-	assert.Equal(t, []interface{}{"key1", "key2", "key3"}, keys, "Keys() should return a slice containing the keys")
-	assert.Equal(t, []interface{}{"value1", "value2", "value3"}, values, "Values() should return a slice containing the keys")
+	assert.ElementsMatch(t, []interface{}{"key1", "key2", "key3"}, keys, "Keys() should return a slice containing the keys")
+	assert.ElementsMatch(t, []interface{}{"value1", "value2", "value3"}, values, "Values() should return a slice containing the keys")
 }
 
 func TestBiMultiMapWriteLock(t *testing.T) {
@@ -188,6 +179,29 @@ func TestBiMultiMapClear(t *testing.T) {
 
 	assert.Equal(t, []interface{}{}, sut.Keys())
 	assert.Equal(t, []interface{}{}, sut.Values())
+}
+
+func TestBiMultiMapMerge(t *testing.T) {
+	map1 := biMultiMapWithMultipleKeysValues()
+
+	map2 := New()
+	map2.Add("key1", "value3")
+	map2.Add("key3", "value3")
+	map2.Add("key1", "value1")
+	map2.Add("key3", "value1")
+	map2.Add("key4", "value4")
+
+	sut := map1.Merge(map2)
+
+	assert.ElementsMatch(t, []interface{}{"key1", "key2", "key3", "key4"}, sut.Keys())
+	assert.ElementsMatch(t, []interface{}{"value1", "value2", "value3"}, sut.LookupKey("key1"))
+	assert.ElementsMatch(t, []interface{}{"value1", "value3"}, sut.LookupKey("key3"))
+	assert.ElementsMatch(t, []interface{}{"value4"}, sut.LookupKey("key4"))
+
+	assert.ElementsMatch(t, []interface{}{"value1", "value2", "value3", "value4"}, sut.Values())
+	assert.ElementsMatch(t, []interface{}{"key1", "key2", "key3"}, sut.LookupValue("value1"))
+	assert.ElementsMatch(t, []interface{}{"key1", "key3"}, sut.LookupValue("value3"))
+	assert.ElementsMatch(t, []interface{}{"key4"}, sut.LookupValue("value4"))
 }
 
 func TestBiMultiMapReadLock(t *testing.T) {
