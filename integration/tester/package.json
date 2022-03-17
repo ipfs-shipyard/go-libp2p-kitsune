@@ -1,0 +1,20 @@
+{
+  "name": "js-ipfs-preload-tester",
+  "version": "0.0.0",
+  "description": "Sanity check a preload server is working as expected",
+  "main": "index.js",
+  "bin": {
+    "ipfs-preload-tester": "bin.js"
+  },
+  "scripts": {
+    "start": "node bin",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Alan Shaw",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^3.0.0",
+    "debug": "^4.1.1",
+    "ipfs-core": "^0.13.0"
+  }
+}

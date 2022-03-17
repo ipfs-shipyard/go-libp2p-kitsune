@@ -27,7 +27,7 @@ var log = logging.Logger("main")
 
 func main() {
 	// TODO Get config from env vars / config file or both (see e.g. https://github.com/spf13/viper)
-	// TODO Functional and performance tests (see https://github.com/mcamou/js-ipfs-preload-tester/tree/update-ipfs)
+	// TODO Performance/load tests
 	// TODO Add metrics (see https://prometheus.io/docs/guides/go-application/)
 
 	// Command-line options
