@@ -1,4 +1,4 @@
-package connection_manager
+package peer_manager
 
 import (
 	"github.com/ipfs/go-cid"

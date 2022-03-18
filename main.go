@@ -19,8 +19,8 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/mcamou/go-libp2p-kitsune/bitswap"
-	cm "github.com/mcamou/go-libp2p-kitsune/connection_manager"
 	"github.com/mcamou/go-libp2p-kitsune/copy"
+	pmgr "github.com/mcamou/go-libp2p-kitsune/peer_manager"
 	"github.com/mcamou/go-libp2p-kitsune/prometheus"
 )
 
@@ -103,22 +103,22 @@ func main() {
 		log.Fatalf("Error while making host: %v\n", err)
 	}
 
-	connMgr, err := cm.New(h, ctx, targetAddrs...)
+	peerMgr, err := pmgr.New(h, ctx, targetAddrs...)
 	if err != nil {
 		log.Fatalf("Error while creating connection manager: %v\n", err)
 	}
-	connMgr.ConnectAllDown()
+	peerMgr.ConnectAllDown()
 
 	log.Infof("Peer ID: %s", h.ID())
 	log.Info("Proxy addresses:")
 	printAddrs(getHostAddresses(h), 4)
 	log.Info("Downstream peers:")
-	printAddrs(connMgr.DownPeers(), 4)
+	printAddrs(peerMgr.DownPeers(), 4)
 
-	addProtoHandlers(ctx, h, connMgr, preloadEnabled)
+	addProtoHandlers(ctx, h, peerMgr, preloadEnabled)
 
 	if preloadEnabled {
-		startPreloadHandler(connMgr, *preloadF)
+		startPreloadHandler(peerMgr, *preloadF)
 	}
 	log.Infof("Listening for bitswap connections on %s\n", h.Network().ListenAddresses()[0])
 
@@ -181,16 +181,16 @@ func makeHost(listenAddr ma.Multiaddr, wsAddr *ma.Multiaddr, priv crypto.PrivKey
 	return libp2p.New(opts...)
 }
 
-func addProtoHandlers(ctx context.Context, h host.Host, connMgr *cm.ConnectionManager, enablePreload bool) {
+func addProtoHandlers(ctx context.Context, h host.Host, peerMgr *pmgr.PeerManager, enablePreload bool) {
 	// Protocols that we handle ourselves
 	ping.NewPingService(h)
 
 	// It would be nice to make this more generic
-	bs := bitswap.New(h, connMgr, enablePreload)
+	bs := bitswap.New(h, peerMgr, enablePreload)
 	bs.AddHandler()
 
 	// Generic handler for any other protocols
-	h.SetStreamHandlerMatch("", copy.Matcher, copy.Handler(h, connMgr))
+	h.SetStreamHandlerMatch("", copy.Matcher, copy.Handler(h, peerMgr))
 }
 
 func getHostAddresses(h host.Host) []ma.Multiaddr {

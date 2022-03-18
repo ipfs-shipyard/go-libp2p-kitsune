@@ -9,15 +9,15 @@ import (
 
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-core/peer"
-	cm "github.com/mcamou/go-libp2p-kitsune/connection_manager"
+	pmgr "github.com/mcamou/go-libp2p-kitsune/peer_manager"
 )
 
-func startPreloadHandler(connMgr *cm.ConnectionManager, port uint64) {
+func startPreloadHandler(peerMgr *pmgr.PeerManager, port uint64) {
 	portStr := fmt.Sprintf(":%v", port)
 	log.Infof("Preload mode enabled with API port %v", port)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v0/refs", preloadRefsHandler(connMgr))
+	mux.HandleFunc("/api/v0/refs", preloadRefsHandler(peerMgr))
 
 	go func() {
 		err := http.ListenAndServe(portStr, mux)
@@ -29,7 +29,7 @@ func startPreloadHandler(connMgr *cm.ConnectionManager, port uint64) {
 	}()
 }
 
-func preloadRefsHandler(connMgr *cm.ConnectionManager) func(w http.ResponseWriter, r *http.Request) {
+func preloadRefsHandler(peerMgr *pmgr.PeerManager) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		cStr, found := r.URL.Query()["arg"]
 
@@ -47,21 +47,21 @@ func preloadRefsHandler(connMgr *cm.ConnectionManager) func(w http.ResponseWrite
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 
 			var peerId peer.ID
-			upPeers := connMgr.UpstreamPeersForIP(remoteIP)
+			upPeers := peerMgr.UpstreamPeersForIP(remoteIP)
 			if len(upPeers) > 0 {
 				// We already have some peers for this IP - send the request to the same downstream
 				// peer. The main issue with this is that if the upstream peer is behind a NAT, all
 				// upstream peers behind that same IP will be assigned to the same downstream peer.
-				peerId = connMgr.DownstreamForPeer(upPeers[0])[0]
+				peerId = peerMgr.DownstreamForPeer(upPeers[0])[0]
 			} else {
 				// This peer's IP is not associated with any upstream peer, so just grab the last one
 				// we used (perhaps a random one would be better?). This should only happen when
 				// js-ipfs starts up and sends a `refs` request before libp2p is fully connected,
 				// or if the libp2p channel disconnects.
-				peerId = connMgr.CurrentDownPeer()
+				peerId = peerMgr.CurrentDownPeer()
 			}
 
-			peerInfo, found := connMgr.DownPeerInfo(peerId)
+			peerInfo, found := peerMgr.DownPeerInfo(peerId)
 			if !found {
 				log.Errorf("Peer %s not found in downstream peers, not sending refs request", peerId)
 				return
@@ -69,7 +69,7 @@ func preloadRefsHandler(connMgr *cm.ConnectionManager) func(w http.ResponseWrite
 
 			url := fmt.Sprintf("http://%s:%v/api/v0/refs?recursive=true&arg=%s", peerInfo.IP, peerInfo.HttpPort, c)
 			log.Debugf("Fetching %s", url)
-			connMgr.AddRefCid(remoteIP, c)
+			peerMgr.AddRefCid(remoteIP, c)
 
 			resp, err := http.Post(url, "application/json", nil)
 			if err != nil {

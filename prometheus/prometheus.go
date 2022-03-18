@@ -16,11 +16,13 @@ var log = logging.Logger("prometheus")
 var (
 	CurrentUpstreamPeers = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "proxy",
+		Subsystem: "bitswap",
 		Name:      "upstream_peers",
 		Help:      "The current number of upstream peers",
 	})
 	CurrentDownstreamPeers = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "proxy",
+		Subsystem: "bitswap",
 		Name:      "downstream_peers",
 		Help:      "The current number of downstream peers",
 	})
@@ -47,6 +49,13 @@ var (
 		Subsystem: "bitswap",
 		Name:      "messages_sent",
 		Help:      "The number of Bitswap messages sent per peerID",
+	}, []string{"peer"})
+	DownstreamBlockRTTms = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "proxy",
+		Subsystem: "bitswap",
+		Name:      "downstream_block_rtt_ms",
+		Help:      "Milliseconds from sending a WANT to a downstream host to receiving the corresponding BLOCK",
+		Buckets:   []float64{250, 500, 1000, 2000, 3000, 5000, 10000, 30000, 60000},
 	}, []string{"peer"})
 )
 

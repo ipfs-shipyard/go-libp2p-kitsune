@@ -1,4 +1,4 @@
-package connection_manager
+package peer_manager
 
 import (
 	"container/ring"
@@ -18,7 +18,7 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-var log = logging.Logger("connection_manager")
+var log = logging.Logger("peer_manager")
 
 // Downstream holds the downstream peers that are behind the proxy
 type Downstream struct {

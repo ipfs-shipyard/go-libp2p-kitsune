@@ -14,7 +14,7 @@ import (
 	logging "github.com/ipfs/go-log/v2"
 
 	"github.com/mcamou/go-libp2p-kitsune/bitswap"
-	cm "github.com/mcamou/go-libp2p-kitsune/connection_manager"
+	pmgr "github.com/mcamou/go-libp2p-kitsune/peer_manager"
 )
 
 var log = logging.Logger("copy")
@@ -46,7 +46,7 @@ func Matcher(proto string) bool {
 }
 
 // Handler copies protocol messages back and forth between an upstream and a downstream host
-func Handler(ha host.Host, connMgr *cm.ConnectionManager) func(s network.Stream) {
+func Handler(ha host.Host, connMgr *pmgr.PeerManager) func(s network.Stream) {
 	return func(upStream network.Stream) {
 		defer upStream.Close()
 

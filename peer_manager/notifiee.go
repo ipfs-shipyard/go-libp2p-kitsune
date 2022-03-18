@@ -1,4 +1,4 @@
-package connection_manager
+package peer_manager
 
 import (
 	"fmt"
@@ -10,11 +10,11 @@ import (
 )
 
 type Notifiee struct {
-	connMgr *ConnectionManager
+	peerManager *PeerManager
 }
 
-func newNotifiee(connMgr *ConnectionManager) *Notifiee {
-	return &Notifiee{connMgr}
+func newNotifiee(peerManager *PeerManager) *Notifiee {
+	return &Notifiee{peerManager}
 }
 
 func (n *Notifiee) Listen(net network.Network, addr ma.Multiaddr) { // called when network starts listening on an addr
@@ -36,7 +36,7 @@ func (n *Notifiee) Connected(net network.Network, conn network.Conn) { // called
 
 	remoteAddr := conn.RemoteMultiaddr().Encapsulate(addr)
 
-	if n.connMgr.down.ContainsPeer(peerId) {
+	if n.peerManager.down.ContainsPeer(peerId) {
 		// Downstream peer connected
 		prometheus.CurrentDownstreamPeers.Add(1)
 		log.Debugf("Connected to downstream peer %s", remoteAddr)
@@ -45,9 +45,9 @@ func (n *Notifiee) Connected(net network.Network, conn network.Conn) { // called
 		prometheus.CurrentUpstreamPeers.Add(1)
 		log.Debugf("Connected to upstream peer %s", remoteAddr)
 
-		downPeer := n.connMgr.down.Next()
-		n.connMgr.conns.Add(peerId, downPeer)
-		err := n.connMgr.AddUpstreamPeerIP(remoteAddr)
+		downPeer := n.peerManager.down.Next()
+		n.peerManager.conns.Add(peerId, downPeer)
+		err := n.peerManager.AddUpstreamPeerIP(remoteAddr)
 		if err != nil {
 			log.Warnf("Error adding upstream peer IP: %s", err)
 		}
@@ -57,39 +57,39 @@ func (n *Notifiee) Connected(net network.Network, conn network.Conn) { // called
 
 func (n *Notifiee) Disconnected(net network.Network, conn network.Conn) { // called when a connection closed
 	remotePeer := conn.RemotePeer()
-	info := n.connMgr.down.host.Peerstore().PeerInfo(remotePeer)
+	info := n.peerManager.down.host.Peerstore().PeerInfo(remotePeer)
 
-	if n.connMgr.down.ContainsPeer(remotePeer) {
+	if n.peerManager.down.ContainsPeer(remotePeer) {
 		// Downstream peer disconnected
 		prometheus.CurrentDownstreamPeers.Sub(1)
 		// Disconnect from all upstream peers that are associated with that downstream peer (they
 		// will reconnect and get assigned another one)
-		upPeers := n.connMgr.conns.DeleteValue(remotePeer)
+		upPeers := n.peerManager.conns.DeleteValue(remotePeer)
 		for _, id := range upPeers {
-			err := n.connMgr.down.host.Network().ClosePeer(id.(peer.ID))
+			err := n.peerManager.down.host.Network().ClosePeer(id.(peer.ID))
 			if err != nil {
 				log.Warnf("Error disconnecting from downstream peer %s: %s", id, err)
 			}
 		}
 
 		log.Debugf("Downstream peer %v disconnected, reconnecting", info.ID)
-		go n.connMgr.down.connectLoop(info)
+		go n.peerManager.down.connectLoop(info)
 	} else {
 		// Upstream peer disconnected
 		prometheus.CurrentUpstreamPeers.Sub(1)
-		ip, found := n.connMgr.UpstreamIPForPeer(remotePeer)
+		ip, found := n.peerManager.UpstreamIPForPeer(remotePeer)
 		if found {
-			for _, c := range n.connMgr.DownWants.CidsForPeer(remotePeer) {
+			for _, c := range n.peerManager.DownWants.CidsForPeer(remotePeer) {
 				// TODO What if 2 peers behind the same NAT have requested the same CID?
-				n.connMgr.DeleteRefCid(ip, c)
+				n.peerManager.DeleteRefCid(ip, c)
 			}
 		}
-		n.connMgr.conns.DeleteKey(remotePeer)
-		n.connMgr.DeleteUpstreamPeerIP(remotePeer)
+		n.peerManager.conns.DeleteKey(remotePeer)
+		n.peerManager.DeleteUpstreamPeerIP(remotePeer)
 
 		// TODO Send Cancels for all of this peer's CIDs to all downstream peers if nobody wants
 		//      them any more
-		n.connMgr.UpWants.DeletePeer(remotePeer)
+		n.peerManager.UpWants.DeletePeer(remotePeer)
 		log.Debugf("Upstream peer %v disconnected", info.ID)
 	}
 }

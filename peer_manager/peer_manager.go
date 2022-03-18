@@ -1,4 +1,4 @@
-package connection_manager
+package peer_manager
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	bmm "github.com/mcamou/go-libp2p-kitsune/bimultimap"
 )
 
-type ConnectionManager struct {
+type PeerManager struct {
 	down      *Downstream
 	upIP      *bmm.BiMultiMap // upstream peer ID <-> IP address (as a string)
 	conns     *bmm.BiMultiMap // upstream peer ID <-> downstream peer ID
@@ -23,7 +23,7 @@ type ConnectionManager struct {
 	SentWants *WantMap        // All wants that have been sent, and the peer that they were sent to
 }
 
-func New(host host.Host, ctx context.Context, addrs ...ma.Multiaddr) (*ConnectionManager, error) {
+func New(host host.Host, ctx context.Context, addrs ...ma.Multiaddr) (*PeerManager, error) {
 	down, err := newDownstream(host, ctx, addrs...)
 	if err != nil {
 		return nil, err
@@ -36,30 +36,30 @@ func New(host host.Host, ctx context.Context, addrs ...ma.Multiaddr) (*Connectio
 	downWants := NewWantMap()
 	sentWants := NewWantMap()
 
-	return &ConnectionManager{down, upIP, conns, refReqs, upWants, downWants, sentWants}, nil
+	return &PeerManager{down, upIP, conns, refReqs, upWants, downWants, sentWants}, nil
 }
 
 // ConnectAllDown connects to all downstream peers
-func (cm *ConnectionManager) ConnectAllDown() {
-	n := newNotifiee(cm)
-	cm.down.connectAll(n)
+func (pm *PeerManager) ConnectAllDown() {
+	n := newNotifiee(pm)
+	pm.down.connectAll(n)
 }
 
 // IsDownstream returns true if a peer is a downstream peer
-func (cm *ConnectionManager) IsDownstream(id peer.ID) bool {
-	return cm.down.ContainsPeer(id)
+func (pm *PeerManager) IsDownstream(id peer.ID) bool {
+	return pm.down.ContainsPeer(id)
 }
 
 // DownstreamForPeer returns the downstream peer associated with an upstream peer. It returns a
 // one-element array for symmetry with UpstreamForPeer.
-func (cm *ConnectionManager) DownstreamForPeer(upPeer peer.ID) []peer.ID {
-	downPeers := cm.conns.LookupKey(upPeer)
+func (pm *PeerManager) DownstreamForPeer(upPeer peer.ID) []peer.ID {
+	downPeers := pm.conns.LookupKey(upPeer)
 
 	// This should never happen, since the Notifiee will take care of filling in the connMap when
 	// a peer connects. still, better safe than sorry
 	if len(downPeers) == 0 {
-		downPeer := cm.down.Next()
-		cm.conns.Add(upPeer, downPeer)
+		downPeer := pm.down.Next()
+		pm.conns.Add(upPeer, downPeer)
 		log.Debugf("Downstream peer not found for upstream %v, connecting to %v\n", upPeer, downPeer)
 
 		return []peer.ID{downPeer}
@@ -69,27 +69,27 @@ func (cm *ConnectionManager) DownstreamForPeer(upPeer peer.ID) []peer.ID {
 }
 
 // CurrentDownPeer returns the last-selected downstream peer
-func (cm *ConnectionManager) CurrentDownPeer() peer.ID {
-	return cm.down.Current()
+func (pm *PeerManager) CurrentDownPeer() peer.ID {
+	return pm.down.Current()
 }
 
 // DownPeerInfo returns the info of a downstream peer
-func (cm *ConnectionManager) DownPeerInfo(id peer.ID) (PeerInfo, bool) {
-	elem, found := cm.down.peers[id]
+func (pm *PeerManager) DownPeerInfo(id peer.ID) (PeerInfo, bool) {
+	elem, found := pm.down.peers[id]
 	if !found {
-		log.Debugf("downstream peer %s not found in %v", id, cm.down.peers)
+		log.Debugf("downstream peer %s not found in %v", id, pm.down.peers)
 	}
 	return elem, found
 }
 
 // DownPeers returns the multiaddrs of all downstream peers
-func (cm *ConnectionManager) DownPeers() []ma.Multiaddr {
-	return cm.down.PeerAddrs()
+func (pm *PeerManager) DownPeers() []ma.Multiaddr {
+	return pm.down.PeerAddrs()
 }
 
 // UpPeers returns the peer IDs of all connected upstream peers
-func (cm *ConnectionManager) UpPeers() []peer.ID {
-	keys := cm.conns.Keys()
+func (pm *PeerManager) UpPeers() []peer.ID {
+	keys := pm.conns.Keys()
 	peers := make([]peer.ID, 0, len(keys))
 	for _, id := range keys {
 		peers = append(peers, id.(peer.ID))
@@ -98,28 +98,28 @@ func (cm *ConnectionManager) UpPeers() []peer.ID {
 }
 
 // AddUpstreamPeerIP adds a mapping between an upstream peer ID and its IP address
-func (cm *ConnectionManager) AddUpstreamPeerIP(addr ma.Multiaddr) error {
+func (pm *PeerManager) AddUpstreamPeerIP(addr ma.Multiaddr) error {
 	_, peerId := peer.SplitAddr(addr)
-	ip, err := cm.IpFromMultiaddr(addr)
+	ip, err := pm.IpFromMultiaddr(addr)
 
 	if err != nil {
 		return err
 	}
 
-	cm.upIP.Add(peerId, ip.String())
+	pm.upIP.Add(peerId, ip.String())
 
 	return nil
 }
 
 // DeleteUpstreamPeerIP deletes one peerID <-> IP address association
-func (cm *ConnectionManager) DeleteUpstreamPeerIP(id peer.ID) {
-	cm.upIP.DeleteKey(id)
+func (pm *PeerManager) DeleteUpstreamPeerIP(id peer.ID) {
+	pm.upIP.DeleteKey(id)
 }
 
 // UpstreamPeersForIP returns the upstream peers associated with a given IP. Note that there can be
 // several in the case of peers behind a NAT.
-func (cm *ConnectionManager) UpstreamPeersForIP(ip net.IP) []peer.ID {
-	keys := cm.upIP.LookupValue(ip.String())
+func (pm *PeerManager) UpstreamPeersForIP(ip net.IP) []peer.ID {
+	keys := pm.upIP.LookupValue(ip.String())
 	peerIds := make([]peer.ID, 0, len(keys))
 	for _, id := range keys {
 		peerIds = append(peerIds, id.(peer.ID))
@@ -128,8 +128,8 @@ func (cm *ConnectionManager) UpstreamPeersForIP(ip net.IP) []peer.ID {
 }
 
 // UpstreamIPForPeer returns the upstream IP associated with a given peer.
-func (cm *ConnectionManager) UpstreamIPForPeer(id peer.ID) (net.IP, bool) {
-	keys := cm.upIP.LookupKey(id)
+func (pm *PeerManager) UpstreamIPForPeer(id peer.ID) (net.IP, bool) {
+	keys := pm.upIP.LookupKey(id)
 
 	if len(keys) > 0 {
 		// Since this is set up when the peer actually connects, we know that there is a single IP
@@ -140,18 +140,18 @@ func (cm *ConnectionManager) UpstreamIPForPeer(id peer.ID) (net.IP, bool) {
 }
 
 // AddRef adds an IP <-> CID mapping
-func (cm *ConnectionManager) AddRefCid(ip net.IP, c cid.Cid) {
-	cm.refReqs.Add(ip.String(), c)
+func (pm *PeerManager) AddRefCid(ip net.IP, c cid.Cid) {
+	pm.refReqs.Add(ip.String(), c)
 }
 
 // DeleteRefCid removes an IP <-> CID mapping
-func (cm *ConnectionManager) DeleteRefCid(ip net.IP, c cid.Cid) {
-	cm.refReqs.DeleteKeyValue(ip.String(), c)
+func (pm *PeerManager) DeleteRefCid(ip net.IP, c cid.Cid) {
+	pm.refReqs.DeleteKeyValue(ip.String(), c)
 }
 
 // RefsForCid returns all the IPs that have requested the CID via /api/v0/refs
-func (cm *ConnectionManager) RefsForCid(c cid.Cid) []net.IP {
-	keys := cm.refReqs.LookupValue(c)
+func (pm *PeerManager) RefsForCid(c cid.Cid) []net.IP {
+	keys := pm.refReqs.LookupValue(c)
 	ips := make([]net.IP, 0, len(keys))
 	for _, ip := range keys {
 		ips = append(ips, net.ParseIP(ip.(string)))
@@ -160,8 +160,8 @@ func (cm *ConnectionManager) RefsForCid(c cid.Cid) []net.IP {
 }
 
 // CidsForRefIp returns all the CIDs that have been requested by the IP via /api/v0/refs
-func (cm *ConnectionManager) CidsForRefIp(ip net.IP) []cid.Cid {
-	values := cm.refReqs.LookupKey(ip)
+func (pm *PeerManager) CidsForRefIp(ip net.IP) []cid.Cid {
+	values := pm.refReqs.LookupKey(ip)
 	cids := make([]cid.Cid, 0, len(values))
 	for _, c := range values {
 		cids = append(cids, c.(cid.Cid))
@@ -170,8 +170,8 @@ func (cm *ConnectionManager) CidsForRefIp(ip net.IP) []cid.Cid {
 }
 
 // UpstreamForPeer returns all the upstream peers associated with a downstream peer
-func (cm *ConnectionManager) UpstreamForPeer(id peer.ID) []peer.ID {
-	keys := cm.conns.LookupValue(id)
+func (pm *PeerManager) UpstreamForPeer(id peer.ID) []peer.ID {
+	keys := pm.conns.LookupValue(id)
 	peers := make([]peer.ID, 0, len(keys))
 	for _, p := range keys {
 		peers = append(peers, p.(peer.ID))
@@ -180,7 +180,7 @@ func (cm *ConnectionManager) UpstreamForPeer(id peer.ID) []peer.ID {
 }
 
 // IpFromMultiaddr extracts the IP address from a multiaddr
-func (cm *ConnectionManager) IpFromMultiaddr(addr ma.Multiaddr) (net.IP, error) {
+func (pm *PeerManager) IpFromMultiaddr(addr ma.Multiaddr) (net.IP, error) {
 	transport, _ := peer.SplitAddr(addr)
 
 	ip, err := transport.ValueForProtocol(ma.ProtocolWithName("ip4").Code)
