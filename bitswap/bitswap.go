@@ -15,8 +15,10 @@ import (
 	bsmsg "github.com/ipfs/go-bitswap/message"
 	bspb "github.com/ipfs/go-bitswap/message/pb"
 	logging "github.com/ipfs/go-log/v2"
+	"github.com/ipfs/go-merkledag"
 
 	cm "github.com/mcamou/go-libp2p-kitsune/connection_manager"
+	"github.com/mcamou/go-libp2p-kitsune/prometheus"
 )
 
 var log = logging.Logger("bitswap")
@@ -54,6 +56,9 @@ func bitswapHandler(h host.Host, connMgr *cm.ConnectionManager, enablePreload bo
 	return func(inStream network.Stream) {
 		defer inStream.Close()
 		inPeer := inStream.Conn().RemotePeer()
+
+		prometheus.TotalBitswapMessagesRecv.Inc()
+		prometheus.BitswapMessagesRecv.WithLabelValues(inPeer.String()).Inc()
 
 		if connMgr.IsDownstream(inPeer) {
 			handleDownStream(h, connMgr, enablePreload, &inStream)

@@ -21,6 +21,7 @@ import (
 	"github.com/mcamou/go-libp2p-kitsune/bitswap"
 	cm "github.com/mcamou/go-libp2p-kitsune/connection_manager"
 	"github.com/mcamou/go-libp2p-kitsune/copy"
+	"github.com/mcamou/go-libp2p-kitsune/prometheus"
 )
 
 var log = logging.Logger("main")
@@ -111,7 +112,7 @@ func main() {
 	log.Infof("Peer ID: %s", h.ID())
 	log.Info("Proxy addresses:")
 	printAddrs(getHostAddresses(h), 4)
-	log.Info("Downstream hosts:")
+	log.Info("Downstream peers:")
 	printAddrs(connMgr.DownPeers(), 4)
 
 	addProtoHandlers(ctx, h, connMgr, preloadEnabled)
@@ -120,6 +121,8 @@ func main() {
 		startPreloadHandler(connMgr, *preloadF)
 	}
 	log.Infof("Listening for bitswap connections on %s\n", h.Network().ListenAddresses()[0])
+
+	prometheus.StartPrometheus(9090)
 
 	// Run until canceled.
 	<-ctx.Done()
@@ -175,9 +178,7 @@ func makeHost(listenAddr ma.Multiaddr, wsAddr *ma.Multiaddr, priv crypto.PrivKey
 		opts = append(opts, libp2p.ListenAddrs(*wsAddr))
 	}
 
-	ha, err := libp2p.New(opts...)
-
-	return ha, err
+	return libp2p.New(opts...)
 }
 
 func addProtoHandlers(ctx context.Context, h host.Host, connMgr *cm.ConnectionManager, enablePreload bool) {

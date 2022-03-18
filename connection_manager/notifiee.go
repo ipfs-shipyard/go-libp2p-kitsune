@@ -5,6 +5,7 @@ import (
 
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/mcamou/go-libp2p-kitsune/prometheus"
 	ma "github.com/multiformats/go-multiaddr"
 )
 
@@ -37,9 +38,11 @@ func (n *Notifiee) Connected(net network.Network, conn network.Conn) { // called
 
 	if n.connMgr.down.ContainsPeer(peerId) {
 		// Downstream peer connected
+		prometheus.CurrentDownstreamPeers.Add(1)
 		log.Debugf("Connected to downstream peer %s", remoteAddr)
 	} else {
 		// Upstream peer connected
+		prometheus.CurrentUpstreamPeers.Add(1)
 		log.Debugf("Connected to upstream peer %s", remoteAddr)
 
 		downPeer := n.connMgr.down.Next()
@@ -58,6 +61,7 @@ func (n *Notifiee) Disconnected(net network.Network, conn network.Conn) { // cal
 
 	if n.connMgr.down.ContainsPeer(remotePeer) {
 		// Downstream peer disconnected
+		prometheus.CurrentDownstreamPeers.Sub(1)
 		// Disconnect from all upstream peers that are associated with that downstream peer (they
 		// will reconnect and get assigned another one)
 		upPeers := n.connMgr.conns.DeleteValue(remotePeer)
@@ -72,6 +76,7 @@ func (n *Notifiee) Disconnected(net network.Network, conn network.Conn) { // cal
 		go n.connMgr.down.connectLoop(info)
 	} else {
 		// Upstream peer disconnected
+		prometheus.CurrentUpstreamPeers.Sub(1)
 		ip, found := n.connMgr.UpstreamIPForPeer(remotePeer)
 		if found {
 			for _, c := range n.connMgr.DownWants.CidsForPeer(remotePeer) {
