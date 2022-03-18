@@ -186,7 +186,8 @@ func addProtoHandlers(ctx context.Context, h host.Host, connMgr *cm.ConnectionMa
 	ping.NewPingService(h)
 
 	// It would be nice to make this more generic
-	bitswap.AddBitswapHandler(h, connMgr, enablePreload)
+	bs := bitswap.New(h, connMgr, enablePreload)
+	bs.AddHandler()
 
 	// Generic handler for any other protocols
 	h.SetStreamHandlerMatch("", copy.Matcher, copy.Handler(h, connMgr))
