@@ -4,11 +4,9 @@ import (
 	"container/ring"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	logging "github.com/ipfs/go-log/v2"
@@ -40,6 +38,7 @@ func (pi *PeerInfo) String() string {
 }
 
 type IdResponse struct {
+	ID        string
 	Addresses []string
 }
 
@@ -71,15 +70,29 @@ func newDownstream(host host.Host, ctx context.Context, addrs ...ma.Multiaddr) (
 // getPeerInfo returns the details of a peer given its API multiaddr, using /api/v0/id to get
 // the info. The multiaddr must be /ip4 (not yet ip6 nor DNS)
 func getPeerInfo(httpAddr ma.Multiaddr) (*PeerInfo, error) {
-	ip, err := httpAddr.ValueForProtocol(ma.ProtocolWithName("ip4").Code)
-	if err != nil {
-		ip4Err := err
-		ip, err = httpAddr.ValueForProtocol(ma.ProtocolWithName("ip6").Code)
-		if err != nil {
-			log.Errorf("Error while getting IP address for multiaddr %s: %s\n%s", httpAddr, ip4Err, err)
-			return nil, err
+	var host string
+
+	hostAddr, err := httpAddr.ValueForProtocol(ma.ProtocolWithName("ip4").Code)
+	if err == nil {
+		host = fmt.Sprintf("/ip4/%s", hostAddr)
+	} else {
+		hostAddr, err = httpAddr.ValueForProtocol(ma.ProtocolWithName("ip6").Code)
+		if err == nil {
+			host = fmt.Sprintf("/ip6/%s", hostAddr)
+			hostAddr = "[" + hostAddr + "]"
+		} else {
+			hostAddr, err = httpAddr.ValueForProtocol(ma.ProtocolWithName("dns4").Code)
+			if err == nil {
+				host = fmt.Sprintf("/dns4/%s", hostAddr)
+			} else {
+				hostAddr, err = httpAddr.ValueForProtocol(ma.ProtocolWithName("dns6").Code)
+				if err == nil {
+					host = fmt.Sprintf("/dns6/%s", hostAddr)
+				} else {
+					return nil, fmt.Errorf("Error while getting host address from multiaddr %s", httpAddr)
+				}
+			}
 		}
-		ip = "[" + ip + "]"
 	}
 
 	portStr, err := httpAddr.ValueForProtocol(ma.ProtocolWithName("tcp").Code)
@@ -94,7 +107,7 @@ func getPeerInfo(httpAddr ma.Multiaddr) (*PeerInfo, error) {
 		return nil, err
 	}
 
-	url := fmt.Sprintf("http://%s:%v/api/v0/id", ip, httpPort)
+	url := fmt.Sprintf("http://%s:%v/api/v0/id", hostAddr, httpPort)
 	resp, err := http.Post(url, "application/json", nil)
 	if err != nil {
 		log.Errorf("Error while getting %s: %s", url, err)
@@ -109,33 +122,39 @@ func getPeerInfo(httpAddr ma.Multiaddr) (*PeerInfo, error) {
 		return nil, err
 	}
 
-	var addr ma.Multiaddr
-	found := false
+	port := ""
 
 	for _, a := range idResp.Addresses {
-		// TODO This assumes that our remote address matches the downstream peer's known addresses,
-		//      which might not be the case if we're connecting via /dns4 or to an IPFS node inside
-		//      a Docker container or behind a firewall, and it hasn't yet figured out its external
-		//      IP. It might be best to just extract the port from the multiaddrs and use the
-		//      IP that we already have.
-		if strings.Contains(a, ip) {
-			// TODO We get the first matching multiaddr, which might not be the best (e.g., tcp
-			//      usually comes before quic)
-			addr, err = ma.NewMultiaddr(a)
+		addr, err := ma.NewMultiaddr(a)
+
+		if err != nil {
+			log.Warnf("Error parsing multiaddr %s from peer %s", a, httpAddr)
+			continue
+		}
+		port, err = addr.ValueForProtocol(ma.ProtocolWithName("udp").Code)
+		log.Debugf("udp: %s, %s", port, err)
+		if err != nil {
+			port, err = addr.ValueForProtocol(ma.ProtocolWithName("tcp").Code)
 			if err != nil {
-				log.Errorf("Invalid multiaddr %s received from %s", httpAddr)
+				log.Warnf("Cannot find tcp/udp port in multiaddr %s from peer %s: %s", addr, httpAddr, err)
 				continue
 			}
-
-			found = true
+			port = fmt.Sprintf("/tcp/%s", port)
 			break
 		}
+
+		port = fmt.Sprintf("/udp/%s/quic", port)
+		break
 	}
 
-	if !found {
-		msg := fmt.Sprintf("Cannot find IP %s in the ID response from %s: %v", ip, httpAddr, idResp.Addresses)
-		log.Error(msg)
-		return nil, errors.New(msg)
+	if len(port) == 0 {
+		return nil, fmt.Errorf("Cannot find tcp/udp port for peer %s, addresses: %v", httpAddr, idResp.Addresses)
+	}
+
+	addrStr := fmt.Sprintf("%s%s/p2p/%s", host, port, idResp.ID)
+	addr, err := ma.NewMultiaddr(addrStr)
+	if err != nil {
+		return nil, fmt.Errorf("Error while parsing multiaddr %s: %s", addrStr, err)
 	}
 
 	_, id := peer.SplitAddr(addr)
@@ -143,7 +162,7 @@ func getPeerInfo(httpAddr ma.Multiaddr) (*PeerInfo, error) {
 	peerInfo := &PeerInfo{
 		ID:       id,
 		Addr:     addr,
-		IP:       ip,
+		IP:       hostAddr,
 		HttpPort: uint16(httpPort),
 	}
 
