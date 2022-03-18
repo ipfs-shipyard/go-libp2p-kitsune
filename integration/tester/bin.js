@@ -20,7 +20,6 @@ async function main () {
   }
 
   data = crypto.randomBytes(256*1024).toString('hex');
-//  const data = argv.data || argv.d || `Test content created on ${new Date()}`
   const apiAddr = argv['api-addr'] || argv.a || DEFAULT_API_ADDR
   const bootstrapAddr = argv['bootstrap-addr'] || argv.b || DEFAULT_BOOTSTRAP_ADDR
 
@@ -33,8 +32,6 @@ async function main () {
   if (bootstrapAddr === DEFAULT_BOOTSTRAP_ADDR) {
     console.log(Chalk.grey('(Use --bootstrap-addr arg to change)'))
   }
-
-  console.log(`💾 Data that will be used in the test: "${data}"`)
 
   console.log('🏃‍♀️ Running the test...')
 
