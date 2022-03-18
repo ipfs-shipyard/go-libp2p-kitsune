@@ -5,6 +5,7 @@ const Fs = require('fs').promises
 const Path = require('path')
 const Chalk = require('chalk')
 const Runner = require('./')
+var crypto = require("crypto");
 
 const DEFAULT_API_ADDR = '/dns4/node0.preload.ipfs.io/https'
 const DEFAULT_BOOTSTRAP_ADDR = '/dns4/node0.preload.ipfs.io/tcp/443/wss/p2p/QmZMxNdpMkewiVZLMRxaNxUeZpDUb34pWjZ1kZvsd16Zic'
@@ -18,7 +19,8 @@ async function main () {
     return console.log(require('./package.json').version)
   }
 
-  const data = argv.data || argv.d || `Test content created on ${new Date()}`
+  data = crypto.randomBytes(256*1024).toString('hex');
+//  const data = argv.data || argv.d || `Test content created on ${new Date()}`
   const apiAddr = argv['api-addr'] || argv.a || DEFAULT_API_ADDR
   const bootstrapAddr = argv['bootstrap-addr'] || argv.b || DEFAULT_BOOTSTRAP_ADDR
 

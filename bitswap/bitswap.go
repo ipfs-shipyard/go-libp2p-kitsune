@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime/debug"
 
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
@@ -97,7 +98,7 @@ func handleDownStream(h host.Host, connMgr *cm.ConnectionManager, enablePreload 
 			return
 		}
 
-		handleBlocks(h, proto, connMgr.UpWants, &received)
+		handleBlocks(h, connMgr, proto, downPeer, connMgr.UpWants, &received, enablePreload)
 		handleDontHaves(h, connMgr, proto, &received, downPeer)
 
 		if enablePreload {
@@ -161,7 +162,7 @@ func handleUpStream(h host.Host, connMgr *cm.ConnectionManager, enablePreload bo
 			// Upstream peers send BLOCKS in response to the WANTs sent by the downstream peers in
 			// response to /api/v0/refs (see #handleWantlist). We just forward them to the
 			// corresponding downstream peer.
-			handleBlocks(h, proto, connMgr.DownWants, &received)
+			handleBlocks(h, connMgr, proto, upPeer, connMgr.DownWants, &received, enablePreload)
 		}
 	}
 }
@@ -173,21 +174,24 @@ func handleUpStream(h host.Host, connMgr *cm.ConnectionManager, enablePreload bo
 // (since the downstream peer only sees us)
 func handleBlocks(
 	h host.Host,
+	connMgr *cm.ConnectionManager,
 	proto protocol.ID,
+	fromPeer peer.ID,
 	wantMap *cm.WantMap,
-	received *bsmsg.BitSwapMessage) {
+	received *bsmsg.BitSwapMessage,
+	enablePreload bool) {
 
 	for _, block := range (*received).Blocks() {
 		c := block.Cid()
-		upPeers := wantMap.PeersForCid(c)
-		log.Debugf("Received block %s wanted by %s", c, upPeers)
+		targetPeers := wantMap.PeersForCid(c)
+		log.Debugf("Received block %s wanted by %s", c, targetPeers)
 
-		for _, upPeer := range upPeers {
-			log.Debugf("Creating a new stream to %v", upPeer)
+		for _, p := range targetPeers {
+			log.Debugf("Creating a new stream to %v", p)
 
-			s, err := h.NewStream(context.Background(), upPeer, proto)
+			s, err := h.NewStream(context.Background(), p, proto)
 			if err != nil {
-				log.Warnf("Error while creating a new stream to upstream %v: %v", upPeer, err)
+				log.Warnf("Error while creating a new stream to upstream %v: %v", p, err)
 				continue
 			}
 			defer s.Close()
@@ -196,11 +200,29 @@ func handleBlocks(
 			// block we receive might be wanted by multiple peers (we would have to build a message
 			// for each of the peers and send them in one go). For the purposes of the preloads
 			// this should be fine (fingers crossed)
+			log.Debugf("Sending block %s to %s", c, p)
 			msg := bsmsg.New(false)
 			msg.AddBlock(block)
+			sendBitswapMessage(h, proto, &msg, p)
 
-			log.Debugf("Sending block %s to %s", c, upPeer)
-			sendBitswapMessage(h, proto, &msg, upPeer)
+			// In preload mode, the downstream peer will probably issue WANTs for each of the links
+			// in the block (since we call /api/v0/refs?recursive=true). We need to record these CIDs
+			// to know to which upstream peer to route the WANTs. One issue is that the downstream
+			// peer might already have the CID so it will not issue a WANT, so the CID will never be
+			// removed from our map. However, all entries for the upstream peer will be cleared once
+			// it disconnects.
+			ip, found := connMgr.UpstreamIPForPeer(p)
+			if enablePreload && found {
+				node, err := merkledag.DecodeProtobufBlock(block)
+				if err != nil {
+					log.Warnf("Error decoding Merkledag for block %s: %s", c, err)
+					continue
+				}
+				for _, link := range node.Links() {
+					log.Debugf("Adding Ref for %s (child of %s) from %s", link.Cid, c, ip)
+					connMgr.AddRefCid(ip, link.Cid)
+				}
+			}
 		}
 	}
 }
@@ -284,10 +306,14 @@ func handleWantlist(
 					}
 				}
 
+				if len(sentTo) == 0 {
+					continue
+				}
+
 				// Delete or record of this peer wanting this CID
 				wantMap.Delete(sourcePeer, c)
 
-				for _, id := range assignedPeers {
+				for _, id := range sentTo {
 					sentWants.Delete(id, c)
 				}
 
@@ -308,7 +334,7 @@ func handleWantlist(
 				log.Debugf("Peer %v wants %v, now wanted by %v", sourcePeer, c, wantMap.PeersForCid(c))
 
 				var peers []peer.ID
-				if sendWantsTo == nil {
+				if sendWantsTo == nil || len(sendWantsTo.PeersForCid(c)) == 0 {
 					peers = assignedPeers
 				} else {
 					peers = sendWantsTo.PeersForCid(c)
@@ -370,6 +396,7 @@ func sendBitswapMessages(
 	peers []peer.ID) {
 	if len(peers) == 0 {
 		log.Error("Sending bitswap message to no peers")
+		debug.PrintStack()
 	} else {
 		for _, id := range peers {
 			sendBitswapMessage(h, proto, msg, id)
@@ -380,6 +407,8 @@ func sendBitswapMessages(
 // sendBitswapMessage converts a message to the appropriate protocol version and sends it on a stream
 func sendBitswapMessage(h host.Host, proto protocol.ID, msg *bsmsg.BitSwapMessage, id peer.ID) {
 	log.Debugf("Sending bitswap message to %s", id)
+	prometheus.TotalBitswapMessagesSent.Inc()
+	prometheus.BitswapMessagesSent.WithLabelValues(id.String()).Inc()
 
 	s, err := h.NewStream(context.Background(), id, proto)
 	if err != nil {

@@ -15,11 +15,18 @@ import (
 func startPreloadHandler(connMgr *cm.ConnectionManager, port uint64) {
 	portStr := fmt.Sprintf(":%v", port)
 	log.Infof("Preload mode enabled with API port %v", port)
-	http.HandleFunc("/api/v0/refs", preloadRefsHandler(connMgr))
-	err := http.ListenAndServe(portStr, nil)
-	if err != nil {
-		log.Fatalf("Error starting HTTP listener")
-	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v0/refs", preloadRefsHandler(connMgr))
+
+	go func() {
+		err := http.ListenAndServe(portStr, mux)
+
+		if err != nil {
+			log.Errorf("Error starting Prometheus listener: %s", err)
+			return
+		}
+	}()
 }
 
 func preloadRefsHandler(connMgr *cm.ConnectionManager) func(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +71,6 @@ func preloadRefsHandler(connMgr *cm.ConnectionManager) func(w http.ResponseWrite
 			log.Debugf("Fetching %s", url)
 			connMgr.AddRefCid(remoteIP, c)
 
-			// TODO Stream response
 			resp, err := http.Post(url, "application/json", nil)
 			if err != nil {
 				log.Errorf("HTTP error while fetching %s", err)

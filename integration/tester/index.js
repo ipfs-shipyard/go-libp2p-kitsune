@@ -47,7 +47,7 @@ exports.run = async ({ data, apiAddr, bootstrapAddr }) => {
   console.log(`Node 1 ID: ${(await ipfs1.id()).id}`)
   console.log(`Node 2 ID: ${(await ipfs2.id()).id}`)
 
-  console.log(`Adding data: "${data}"`)
+  // console.log(`Adding data: "${data}"`)
   const { cid } = await ipfs1.add(data)
 
   console.log(`CID: `, cid)

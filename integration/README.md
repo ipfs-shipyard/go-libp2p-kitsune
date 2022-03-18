@@ -1,19 +1,27 @@
 # Integration tests
 
 The integration test is inspired on [js-ipfs-preload-tester](https://github.com/mcamou/js-ipfs-preload-tester).
-However, while `js-ipfs-preload-tester` uses one IPFS node running in-process in
-Node.js and a second one running in a browser controlled via Puppeteer, this test
-runs 2 nodes in Node.js. The reason for this is that the browser does not support
-WebSockets without a valid SSL certificate, which entails adding Nginx or a similar
-revers proxy into the mix, and I have been unable to make it play nice with a
-self-signed one.
+There are some differences:
+
+- `js-ipfs-preload-tester` uses one IPFS node running in-process in Node.js and a
+   second one running in a browser controlled via Puppeteer. This test runs both
+   nodes in-process in Node.js. This is because the browser does not support
+   WebSockets without a valid SSL certificate, which entails adding Nginx or a
+   similar revers proxy into the mix, and I have been unable to make it play nice
+   with a self-signed certificate.
+- `js-ipfs-preload-tester` uses a short, timestamped string as the data. This test
+   uses a 512K string. The string is created by generating a buffer of 256K random
+   bytes and hex-encoding it. This is to test that IPLD navigation works correctly.
+- `js-ipfs-preload-tester` does not disable MDNS in the js-ipfs nodes. This test
+   does disable it to ensure that the js-ipfs nodes don't talk directly to each
+   other and that all communication goes through the proxy even if everything is
+   in the same LAN.
 
 What the test does is:
 
-- Start two js-ipfs nodes connected to a preload proxy
-- Add some content on one of the nodes (the content includes a timestamp to ensure
-  that it is different every time)
-- Fetch the CID from the other node and verify that the content matches
+- Start two js-ipfs nodes connected to a preload proxy.
+- Add some content on one of the nodes.
+- Fetch the CID from the other node and verify that the content matches.
 
 ## Running the test
 
@@ -34,11 +42,9 @@ If everything goes well, you should see something similar to the following:
 ``` text
 🌎 Using preloader API Address: /ip4/127.0.0.1/tcp/25001
 🥾 Using preloader Bootstrap Address: /ip4/127.0.0.1/tcp/28080/ws/p2p/Qma2SN9rV1JawUig6ydWYrM49xLXVVTqcKdMwsETqPCXME
-💾 Data that will be used in the test: "Test content created on Thu Mar 17 2022 17:22:35 GMT+0100 (Central European Standard Time)"
 🏃‍♀️ Running the test...
 Node 1 ID: 12D3KooWGgXUbNVhRCxRyJGkpc4hricEQeK8Y5fwcbfc1RztdA8Y
 Node 2 ID: 12D3KooWMkEdFjH3HdiwUdqVYfQyUMGti4FZReKwxdjEyUnTJKa2
-Adding data: "Test content created on Thu Mar 17 2022 17:22:35 GMT+0100 (Central European Standard Time)"
 CID:  CID(QmVDgAY8o9c7SoUoZxRb4ar1KRrmpqQoaogeKqg7bSZEYx)
 Test execution time: 2.018s
 🥳 This preloader is working as expected
