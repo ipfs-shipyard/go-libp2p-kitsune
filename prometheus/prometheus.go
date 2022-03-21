@@ -50,11 +50,13 @@ var (
 		Name:      "messages_sent",
 		Help:      "The number of Bitswap messages sent per peerID",
 	}, []string{"peer"})
-	DownstreamBlockRTTms = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	// TODO Should we only keep stats for downstream peers? There will be a LOT of upstream
+	//      peers here
+	BlockRTTms = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "proxy",
 		Subsystem: "bitswap",
-		Name:      "downstream_block_rtt_ms",
-		Help:      "Milliseconds from sending a WANT to a downstream host to receiving the corresponding BLOCK",
+		Name:      "block_rtt_ms",
+		Help:      "Milliseconds from sending a WANT to a peer to receiving the corresponding BLOCK",
 		Buckets:   []float64{250, 500, 1000, 2000, 3000, 5000, 10000, 30000, 60000},
 	}, []string{"peer"})
 )

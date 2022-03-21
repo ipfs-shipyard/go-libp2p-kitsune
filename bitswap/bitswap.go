@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"runtime/debug"
+	"time"
 
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
@@ -20,6 +21,8 @@ import (
 
 	pmgr "github.com/mcamou/go-libp2p-kitsune/peer_manager"
 	"github.com/mcamou/go-libp2p-kitsune/prometheus"
+
+	bmm "github.com/mcamou/go-libp2p-kitsune/bimultimap"
 )
 
 var log = logging.Logger("bitswap")
@@ -36,13 +39,14 @@ var (
 )
 
 type Bitswap struct {
-	host          host.Host
-	peerManager   *pmgr.PeerManager
-	enablePreload bool
+	host           host.Host
+	peerManager    *pmgr.PeerManager
+	enablePreload  bool
+	wantTimestamps *bmm.BiMultiMap // CID <-> time WANT sent (for outstanding blocks)
 }
 
 func New(h host.Host, peerManager *pmgr.PeerManager, enablePreload bool) *Bitswap {
-	return &Bitswap{h, peerManager, enablePreload}
+	return &Bitswap{h, peerManager, enablePreload, bmm.New()}
 }
 
 // AddHandler adds the handlers for the bitswap protocols
@@ -67,6 +71,8 @@ func (bs *Bitswap) handler(inStream network.Stream) {
 	defer inStream.Close()
 	inPeer := inStream.Conn().RemotePeer()
 
+	// TODO Should we only keep stats for downstream peers? There will be a LOT of upstream
+	//      peers here
 	prometheus.TotalBitswapMessagesRecv.Inc()
 	prometheus.BitswapMessagesRecv.WithLabelValues(inPeer.String()).Inc()
 
@@ -175,6 +181,14 @@ func (bs *Bitswap) handleBlocks(
 
 	for _, block := range (*received).Blocks() {
 		c := block.Cid()
+		times := bs.wantTimestamps.DeleteKey(c)
+		// TODO Should we only keep stats for downstream peers? There will be a LOT of upstream
+		//      peers here
+		if len(times) > 0 {
+			elapsed := time.Since(times[0].(time.Time)).Milliseconds()
+			prometheus.BlockRTTms.WithLabelValues(fromPeer.String()).Observe(float64(elapsed))
+		}
+
 		targetPeers := wantMap.PeersForCid(c)
 		log.Debugf("Received block %s wanted by %s", c, targetPeers)
 
@@ -337,6 +351,7 @@ func (bs *Bitswap) handleWantlist(
 				// for each of the peers and send them in one go). For the purposes of the preloads
 				// this should be fine (fingers crossed)
 				bs.sendBitswapMessages(proto, &msg, peers)
+				bs.wantTimestamps.Add(c, time.Now())
 
 				for _, id := range peers {
 					sentWants.Add(id, c)
@@ -397,6 +412,8 @@ func (bs *Bitswap) sendBitswapMessages(proto protocol.ID, msg *bsmsg.BitSwapMess
 // sendBitswapMessage converts a message to the appropriate protocol version and sends it on a stream
 func (bs *Bitswap) sendBitswapMessage(proto protocol.ID, msg *bsmsg.BitSwapMessage, id peer.ID) {
 	log.Debugf("Sending bitswap message to %s", id)
+	// TODO Should we only keep stats for downstream peers? There will be a LOT of upstream
+	//      peers here
 	prometheus.TotalBitswapMessagesSent.Inc()
 	prometheus.BitswapMessagesSent.WithLabelValues(id.String()).Inc()
 
