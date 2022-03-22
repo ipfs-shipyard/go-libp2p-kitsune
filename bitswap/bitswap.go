@@ -286,11 +286,12 @@ func (bs *Bitswap) handleWantlist(
 
 	wantlist := received.Wantlist()
 
-	// We need to lock the wantMap for 2 reasons:
-	// 1. A peer sends a diff wantlist at the same time that another one sends a full one
-	// 2. A peer sends a Cancel at the same time that another one sends a WANT
-	wantMap.Lock()
-	defer wantMap.Unlock()
+	// FIXME There is a race condition here:
+	//       1. A peer sends a diff wantlist at the same time that another one sends a full one
+	//       2. A peer sends a Cancel at the same time that another one sends a WANT
+	//       We might need to have a separate RWLock, or rethink how we handle Full wantlists
+	//       wantMap.Lock()
+	//       defer wantMap.Unlock()
 
 	if received.Full() {
 		bs.handleFullWantlist(proto, sourcePeer, wantlist, wantMap, assignedPeers)

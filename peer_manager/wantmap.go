@@ -78,14 +78,6 @@ func (wm *WantMap) DeleteCid(c cid.Cid) {
 	wm.wantMap.DeleteValue(c)
 }
 
-func (wm *WantMap) Lock() {
-	wm.wantMap.Lock()
-}
-
-func (wm *WantMap) Unlock() {
-	wm.wantMap.Unlock()
-}
-
 func (wm *WantMap) Clear() {
 	wm.wantMap.Clear()
 }

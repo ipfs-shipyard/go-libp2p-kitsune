@@ -2,7 +2,6 @@ package bimultimap
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -10,10 +9,8 @@ import (
 func TestNewBiMultiMap(t *testing.T) {
 	sut := New()
 	expected := &BiMultiMap{
-		forward:     make(map[interface{}][]interface{}),
-		inverse:     make(map[interface{}][]interface{}),
-		readLocked:  false,
-		writeLocked: false,
+		forward: make(map[interface{}][]interface{}),
+		inverse: make(map[interface{}][]interface{}),
 	}
 	assert.Equal(t, expected, sut, "a new BiMultiMap should be empty")
 }
@@ -127,52 +124,6 @@ func TestBiMultiMapKeysValues(t *testing.T) {
 	assert.ElementsMatch(t, []interface{}{"value1", "value2", "value3"}, values, "Values() should return a slice containing the keys")
 }
 
-func TestBiMultiMapWriteLock(t *testing.T) {
-	sut := New()
-
-	go func() {
-		sut.Lock()
-		assert.Truef(t, sut.IsLocked(), "Lock() should lock the BiMultiMap for writing")
-
-		time.Sleep(50 * time.Millisecond)
-		sut.Add("key1", "value1")
-		time.Sleep(50 * time.Millisecond)
-		sut.Add("key1", "value2")
-		time.Sleep(50 * time.Millisecond)
-		sut.Add("key2", "value1")
-		time.Sleep(50 * time.Millisecond)
-		sut.Add("key2", "value2")
-		time.Sleep(50 * time.Millisecond)
-
-		sut.Unlock()
-	}()
-
-	// Wait a moment for the goroutine to start
-	time.Sleep(50 * time.Millisecond)
-
-	sut.Lock()
-
-	sut.DeleteKeyValue("key1", "value1")
-	time.Sleep(50 * time.Millisecond)
-	sut.DeleteKeyValue("key1", "value2")
-	time.Sleep(50 * time.Millisecond)
-	sut.DeleteKeyValue("key2", "value1")
-	time.Sleep(50 * time.Millisecond)
-	sut.DeleteKeyValue("key2", "value2")
-	time.Sleep(50 * time.Millisecond)
-
-	sut.Unlock()
-
-	expected := &BiMultiMap{
-		forward:     make(map[interface{}][]interface{}),
-		inverse:     make(map[interface{}][]interface{}),
-		readLocked:  false,
-		writeLocked: false,
-	}
-
-	assert.Equal(t, expected, sut, "Lock() should lock the BiMultiMap for writing and RLock() for reading")
-}
-
 func TestBiMultiMapClear(t *testing.T) {
 	sut := biMultiMapWithMultipleKeysValues()
 	sut.Clear()
@@ -202,37 +153,6 @@ func TestBiMultiMapMerge(t *testing.T) {
 	assert.ElementsMatch(t, []interface{}{"key1", "key2", "key3"}, sut.LookupValue("value1"))
 	assert.ElementsMatch(t, []interface{}{"key1", "key3"}, sut.LookupValue("value3"))
 	assert.ElementsMatch(t, []interface{}{"key4"}, sut.LookupValue("value4"))
-}
-
-func TestBiMultiMapReadLock(t *testing.T) {
-	sut := New()
-
-	go func() {
-		sut.Lock()
-		assert.Truef(t, sut.IsLocked(), "Lock() should lock the BiMultiMap for writing")
-		assert.Falsef(t, sut.IsRLocked(), "Lock() should not lock the BiMultiMap for reading")
-
-		time.Sleep(50 * time.Millisecond)
-		sut.Add("key1", "value1")
-		time.Sleep(50 * time.Millisecond)
-		sut.Add("key1", "value2")
-		time.Sleep(50 * time.Millisecond)
-		sut.Add("key2", "value1")
-		time.Sleep(50 * time.Millisecond)
-		sut.Add("key2", "value2")
-		time.Sleep(50 * time.Millisecond)
-
-		sut.Unlock()
-	}()
-
-	// Wait a moment for the goroutine to start
-	time.Sleep(50 * time.Millisecond)
-
-	sut.RLock()
-	assert.Truef(t, sut.IsRLocked(), "RLock() should lock the BiMultiMap for writing")
-	assert.Falsef(t, sut.IsLocked(), "RLock() should not lock the BiMultiMap for reading")
-	assert.Equal(t, []interface{}{"value1", "value2"}, sut.LookupKey("key1"), "RLock() should wait for a write lock to be unlocked")
-	assert.Equal(t, []interface{}{"value1", "value2"}, sut.LookupKey("key2"), "RLock() should wait for a write lock to be unlocked")
 }
 
 func biMultiMapWithMultipleKeysValues() *BiMultiMap {
