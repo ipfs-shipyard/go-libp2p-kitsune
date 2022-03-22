@@ -15,18 +15,38 @@ own costs.
 Specifically, one problem we have experienced at [Protocol Labs](https://protocol.ai)
 is that it is very difficult or impossible to horizontally scale a node,
 especially when clients have hardcoded Multiaddresses to point to specific peers.
-One specific case is the [js-ipfs](https://github.com/ipfs/js-ipfs) preload nodes.
-The preload node multiaddresses are hardcoded in the js-ipfs library itself. While
-we have added preload nodes as load increased, there are applications out there
-that are still running with outdated versions of the library which know only of a
-subset of them. This has resulted in increasing load on the first preload nodes
-that were installed, and the only way to reduce the load is by scaling up. In the
-long term, this is unsustainable.
+One specific case is the [js-ipfs](https://github.com/ipfs/js-ipfs) preload nodes,
+which are used by js-ipfs for 2 purposes:
+
+* As a proxy to the DHT (since js-ipfs in the browser is limited in the number of
+  connections that it can establish, and cannot listen for connections).
+* As a persistence mechanism. Every time content is added to a js-ipfs node, it
+  will also cause the preload node to fetch that content from itself (via their
+  `/api/v0/refs` endpoint), so that it's persisted even if the page is reloaded.
+
+Since the preload nodes also have to act as bootstrap nodes, their multiaddresses
+have to be added to the js-ipfs configuration. Since they are bootstrap nodes,
+their full multiaddresses (including their Node IDs) are nodes are hardcoded in
+the library itself. This also means that adding a new node means releasing a new
+version of the library. While we have added preload nodes as load increased, there
+are applications out there that are still running with outdated versions of the
+library which know only of a subset of them. This has resulted in increasing load
+on the first preload nodes that were installed, and the only way to reduce the
+load is by scaling up. In the long term, this is unsustainable.
 
 The idea behind Kitsune is to replace the preload nodes with a load balancer,
 which will then balance the load between downstream go-ipfs nodes. The load balancer
 will take over the identity of the current preload nodes, allowing us to scale them
 out.
+
+## Terminology
+
+* A **downstream** node or peer is one of the nodes behind the reverse proxy (e.g.
+  the go-ipfs preload nodes)
+* An **upstream** node or peer is a node that requests data from the reverse proxy
+  (e.g. the js-ipfs nodes)
+
+## TODO diagrams
 
 ## Project goals
 
@@ -88,7 +108,7 @@ The binary is called `go-libp2p-kitsune` and accepts the following flags:
 
 `-p` (optional) Enable preload mode and indicate the preload API port (see below)
 
-## Preload mode (WIP)
+## Preload mode
 
 Normally Kitsune will forward bitswap traffic in one direction only:
 
@@ -101,15 +121,14 @@ the upstream host to the downstream swarm's DHT.
 
 Enabling the preload functionality allows Kitsune to act as a proxy for the js-ipfs
 preload nodes. Apart from the basic functionality of allowing upstream peers to get
-bitswap data from the downstream peers, it will:
+bitswap data from the downstream peers, it will enable the `/api/v0/refs` GRPC endpoint.
+The preloads use this for 2 things:
 
-* Enable the `/api/v0/refs` GRPC endpoint. The preloads use this for 2 things:
-
-  * Pre-cache a whole IPLD graph and allow js-ipfs node to get all the associated
-    blocks in parallel
-  * When adding a file to IPFS, js-ipfs will call `/api/v0/refs?recursive=true&arg=<CID>`.
-    This starts a bitswap session from the preload node to the js-ipfs node, so
-    that the data is preserved in case e.g. of a browser reload
+* To pre-cache a whole IPLD graph and allow a js-ipfs node to get all the associated
+  blocks in parallel
+* When adding a file to IPFS, js-ipfs will call `/api/v0/refs?recursive=true&arg=<CID>`.
+  This starts a bitswap session from the preload node to the js-ipfs node, so that
+  the data is preserved in case e.g. of a browser reload
 
 This second case means that we need to enable a limited version of Bitswap going
 the inverse way: WANTs from downstream nodes and BLOCKs to upstream nodes. Calling
