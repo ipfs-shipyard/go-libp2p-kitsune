@@ -1,7 +1,7 @@
 # Kitsune: a go-libp2p proxy/load balancer
 
 Kitsune is a proxy/load balancer based on libp2p. It is currently centered on
-load-balancing IPFS traffic.
+load-balancing IPFS traffic over bitswap.
 
 ## Why?
 
@@ -15,7 +15,8 @@ own costs.
 Specifically, one problem we have experienced at [Protocol Labs](https://protocol.ai)
 is that it is very difficult or impossible to horizontally scale a node,
 especially when clients have hardcoded Multiaddresses to point to specific peers.
-One specific case is the [js-ipfs](https://github.com/ipfs/js-ipfs) preload nodes,
+
+One specific case is the [js-ipfs](https://github.com/ipfs/js-ipfs) [preload nodes](https://docs.ipfs.io/concepts/nodes/#preload),
 which are used by js-ipfs for 2 purposes:
 
 * As a proxy to the DHT (since js-ipfs in the browser is limited in the number of
@@ -86,29 +87,58 @@ file is included if you use `asdf`.
 
 ## Running
 
+```console
+$ GOLOG_LOG_LEVEL=info ./go-libp2p-kitsune -d /ip4/127.0.0.1/tcp/5001 -l /ip4/0.0.0.0/tcp/4441
+2022-03-23T14:07:59.036+0100	INFO	main	go-libp2p-kitsune/main.go:111	Peer ID: QmQGKBtcrBLFTfKQNVKMRkfQDvvrPUdR2j3JDKXAN4K9Fg
+2022-03-23T14:07:59.036+0100	INFO	main	go-libp2p-kitsune/main.go:112	Proxy addresses:
+2022-03-23T14:07:59.036+0100	INFO	main	go-libp2p-kitsune/main.go:210	    /ip4/192.168.1.102/tcp/4441/p2p/QmQGKBtcrBLFTfKQNVKMRkfQDvvrPUdR2j3JDKXAN4K9Fg
+2022-03-23T14:07:59.036+0100	INFO	main	go-libp2p-kitsune/main.go:210	    /ip4/127.0.0.1/tcp/4441/p2p/QmQGKBtcrBLFTfKQNVKMRkfQDvvrPUdR2j3JDKXAN4K9Fg
+2022-03-23T14:07:59.036+0100	INFO	main	go-libp2p-kitsune/main.go:114	Downstream peers:
+2022-03-23T14:07:59.036+0100	INFO	main	go-libp2p-kitsune/main.go:210	    /ip4/127.0.0.1/tcp/4001/p2p/12D3KooWArqy6bE4wH8UnHABYXYtid9uaCpi6kkar8im69KzKjcU
+
+2022-03-23T14:07:59.037+0100	INFO	prometheus	prometheus/prometheus.go:78	Prometheus server started on port 9090
+```
+
 The binary is called `go-libp2p-kitsune` and accepts the following flags:
 
-`-d` (mandatory) Comma-separated list of downstream go-ipfs node API port multiaddrs
-     (e.g. `/ip4/10.0.1.42/tcp/5002,/ip4/10.0.5.3/tcp/5002`). The backing go-ipfs
-     nodes must allow access to the `/api/v0/id` and `/api/v0/refs` GRPC endpoints.
+* `-d <multiaddr>` (mandatory) Comma-separated list of downstream go-ipfs node RPC API port multiaddrs
+  (e.g. `/ip4/10.0.1.42/tcp/5001,/ip4/10.0.5.3/tcp/5002`). The backing go-ipfs
+  nodes must allow access to the `/api/v0/id` and `/api/v0/refs` [HTTP RPC](https://docs.ipfs.io/reference/http/api/) endpoints.
 
-`-l` (optional) Multiaddr to listen on for TCP/UDP traffic (e.g. `/ip4/127.0.0.1/tcp/4001`).
-     IP `0.0.0.0` means listening on all available IP addresses. The default is `/ip4/0.0.0.0/tcp/0`
-     (all IP addresses, random port).
+* `-l <multiaddr>` (optional) Multiaddr to listen on for TCP/UDP traffic (e.g. `/ip4/127.0.0.1/tcp/4441`).
+  IP `0.0.0.0` means listening on all available IP addresses. The default is `/ip4/0.0.0.0/tcp/0`
+  (all IP addresses, random port).
 
-`-w` (optional in normal mode, mandatory in preload mode) Multiaddr to listen
-     on for WebSocket traffic, with or without the `/ws` protocol (e.g. `/ip4/127.0.0.1/tcp/8080`
-     or `/ip4/127.0.0.1/tcp/8080/ws`). IP `0.0.0.0` means listening on all available
-     IP addresses. The default is `/ip4/0.0.0.0/tcp/0` (all IP addresses, random
-     port).
+* `-w <multiaddr>` (optional in normal mode, mandatory in preload mode) Multiaddr to listen
+  on for WebSocket traffic, with or without the `/ws` protocol (e.g. `/ip4/127.0.0.1/tcp/8442`
+  or `/ip4/127.0.0.1/tcp/8442/ws`). IP `0.0.0.0` means listening on all available
+  IP addresses. The default is `/ip4/0.0.0.0/tcp/0` (all IP addresses, random
+  port).
 
-`-k` (optional) Name of the keyfile. When Kitsune starts up the first time it will
-     store its private key in this file. The next times it will read this file
-     to get its identity/private key.
+* `-k <file>` (optional) Name of the keyfile. When Kitsune starts up the first time it will
+  store its private key in this file. The next times it will read this file
+  to get its identity/private key. This is the same key format as in `ipfs key import|export`.
+  The default is `./key`
 
-`-p` (optional) Enable preload mode and indicate the preload API port (see below)
+* `-p <port>` (optional) Enable preload mode and indicate the port used
+  for exposing the `/api/v0/refs` endpoint (see below)
 
-## Preload mode
+### Preload mode
+
+```console
+> GOLOG_LOG_LEVEL=info ./go-libp2p-kitsune -d /ip4/127.0.0.1/tcp/5001 -l /ip4/0.0.0.0/tcp/4441 -p 8441 -w /ip4/0.0.0.0/tcp/8442
+2022-03-23T14:14:58.173+0100	INFO	main	go-libp2p-kitsune/main.go:111	Peer ID: QmQGKBtcrBLFTfKQNVKMRkfQDvvrPUdR2j3JDKXAN4K9Fg
+2022-03-23T14:14:58.173+0100	INFO	main	go-libp2p-kitsune/main.go:112	Proxy addresses:
+2022-03-23T14:14:58.173+0100	INFO	main	go-libp2p-kitsune/main.go:210	    /ip4/192.168.1.102/tcp/4441/p2p/QmQGKBtcrBLFTfKQNVKMRkfQDvvrPUdR2j3JDKXAN4K9Fg
+2022-03-23T14:14:58.174+0100	INFO	main	go-libp2p-kitsune/main.go:210	    /ip4/127.0.0.1/tcp/4441/p2p/QmQGKBtcrBLFTfKQNVKMRkfQDvvrPUdR2j3JDKXAN4K9Fg
+2022-03-23T14:14:58.174+0100	INFO	main	go-libp2p-kitsune/main.go:210	    /ip4/192.168.1.102/tcp/8442/ws/p2p/QmQGKBtcrBLFTfKQNVKMRkfQDvvrPUdR2j3JDKXAN4K9Fg
+2022-03-23T14:14:58.174+0100	INFO	main	go-libp2p-kitsune/main.go:210	    /ip4/127.0.0.1/tcp/8442/ws/p2p/QmQGKBtcrBLFTfKQNVKMRkfQDvvrPUdR2j3JDKXAN4K9Fg
+2022-03-23T14:14:58.174+0100	INFO	main	go-libp2p-kitsune/main.go:114	Downstream peers:
+2022-03-23T14:14:58.174+0100	INFO	main	go-libp2p-kitsune/main.go:210	    /ip4/127.0.0.1/tcp/4001/p2p/12D3KooWArqy6bE4wH8UnHABYXYtid9uaCpi6kkar8im69KzKjcU
+2022-03-23T14:14:58.174+0100	INFO	main	go-libp2p-kitsune/preload_http.go:17	Preload mode enabled with HTTP /api/v0/refs on port 8441
+
+2022-03-23T14:14:58.174+0100	INFO	prometheus	prometheus/prometheus.go:78	Prometheus server started on port 9090
+```
 
 Normally Kitsune will forward bitswap traffic in one direction only:
 
@@ -121,7 +151,7 @@ the upstream host to the downstream swarm's DHT.
 
 Enabling the preload functionality allows Kitsune to act as a proxy for the js-ipfs
 preload nodes. Apart from the basic functionality of allowing upstream peers to get
-bitswap data from the downstream peers, it will enable the `/api/v0/refs` GRPC endpoint.
+bitswap data from the downstream peers, it will enable the `/api/v0/refs` RPC endpoint.
 The preloads use this for 2 things:
 
 * To pre-cache a whole IPLD graph and allow a js-ipfs node to get all the associated

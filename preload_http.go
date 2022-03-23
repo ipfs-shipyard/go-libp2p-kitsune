@@ -14,7 +14,7 @@ import (
 
 func startPreloadHandler(peerMgr *pmgr.PeerManager, port uint64) {
 	portStr := fmt.Sprintf(":%v", port)
-	log.Infof("Preload mode enabled with API port %v", port)
+	log.Infof("Preload mode enabled with HTTP /api/v0/refs endpoint on port %v", port)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v0/refs", preloadRefsHandler(peerMgr))

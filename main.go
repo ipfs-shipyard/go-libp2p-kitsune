@@ -119,7 +119,7 @@ func main() {
 	if preloadEnabled {
 		startPreloadHandler(peerMgr, *preloadF)
 	}
-	log.Infof("Listening for bitswap connections on %s\n", h.Network().ListenAddresses()[0])
+	log.Debugf("Listening for bitswap connections on %s\n", h.Network().ListenAddresses()[0])
 
 	prometheus.StartPrometheus(9090)
 
