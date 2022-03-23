@@ -54,7 +54,7 @@ func Handler(ha host.Host, connMgr *pmgr.PeerManager) func(s network.Stream) {
 		proto := upStream.Protocol()
 
 		if connMgr.IsDownstream(upPeer) {
-			log.Warnf("Received non-bitswap stream %v from downstream peer %v\n. Bailing out.", proto, upPeer)
+			// We ignore traffic in this direciton
 			return
 		}
 
