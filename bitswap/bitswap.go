@@ -182,11 +182,14 @@ func (bs *Bitswap) handleBlocks(
 	for _, block := range (*received).Blocks() {
 		c := block.Cid()
 		times := bs.wantTimestamps.DeleteKey(c)
-		// TODO Should we only keep stats for downstream peers? There will be a LOT of upstream
-		//      peers here
+
 		if len(times) > 0 {
 			elapsed := time.Since(times[0].(time.Time)).Milliseconds()
-			prometheus.BlockRTTms.WithLabelValues(fromPeer.String()).Observe(float64(elapsed))
+			if bs.peerManager.IsDownstream(fromPeer) {
+				prometheus.DownstreamBlockRTTms.WithLabelValues(fromPeer.String()).Observe(float64(elapsed))
+			} else {
+				prometheus.UpstreamBlockRTTms.Observe(float64(elapsed))
+			}
 		}
 
 		targetPeers := wantMap.PeersForCid(c)
@@ -213,7 +216,7 @@ func (bs *Bitswap) handleBlocks(
 
 			// In preload mode, the downstream peer will probably issue WANTs for each of the links
 			// in the block (since we call /api/v0/refs?recursive=true). We need to record these CIDs
-			// to know to which upstream peer to route the WANTs. One issue is that the downstream
+			// to know to which upstream peer to route the WANTs to. One issue is that the downstream
 			// peer might already have the CID so it will not issue a WANT, so the CID will never be
 			// removed from our map. However, all entries for the upstream peer will be cleared once
 			// it disconnects.
