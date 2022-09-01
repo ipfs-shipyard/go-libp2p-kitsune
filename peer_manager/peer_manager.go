@@ -10,7 +10,7 @@ import (
 
 	ma "github.com/multiformats/go-multiaddr"
 
-	bmm "github.com/mcamou/go-libp2p-kitsune/bimultimap"
+	bmm "github.com/mcamou/go-bimultimap"
 )
 
 type PeerManager struct {

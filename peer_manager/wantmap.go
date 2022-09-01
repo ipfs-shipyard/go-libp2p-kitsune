@@ -3,7 +3,7 @@ package peer_manager
 import (
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-core/peer"
-	bmm "github.com/mcamou/go-libp2p-kitsune/bimultimap"
+	bmm "github.com/mcamou/go-bimultimap"
 )
 
 // WantMap is a wrapper around a peerId <-> CID BiMultiMap

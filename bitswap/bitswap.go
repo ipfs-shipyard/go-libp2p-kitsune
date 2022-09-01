@@ -22,7 +22,7 @@ import (
 	pmgr "github.com/mcamou/go-libp2p-kitsune/peer_manager"
 	"github.com/mcamou/go-libp2p-kitsune/prometheus"
 
-	bmm "github.com/mcamou/go-libp2p-kitsune/bimultimap"
+	bmm "github.com/mcamou/go-bimultimap"
 )
 
 var log = logging.Logger("bitswap")
