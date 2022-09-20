@@ -7,7 +7,7 @@ RUN apk --update add ca-certificates
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . ./
-RUN go build -ldflags="-w -s" -o /kitsune
+RUN go build -o /kitsune
 
 FROM scratch
 COPY --from=builder /kitsune .
