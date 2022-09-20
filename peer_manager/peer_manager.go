@@ -15,9 +15,9 @@ import (
 
 type PeerManager struct {
 	down      *Downstream
-	upIP      *bmm.BiMultiMap // upstream peer ID <-> IP address (as a string)
-	conns     *bmm.BiMultiMap // upstream peer ID <-> downstream peer ID
-	refReqs   *bmm.BiMultiMap // upstream IP (as a string) <-> CID (requested by /api/v0/refs)
+	upIP      *bmm.BiMultiMap[peer.ID, string] // upstream peer ID <-> IP address (as a string)
+	conns     *bmm.BiMultiMap[peer.ID, peer.ID] // upstream peer ID <-> downstream peer ID
+	refReqs   *bmm.BiMultiMap[string, cid.Cid] // upstream IP (as a string) <-> CID (requested by /api/v0/refs)
 	UpWants   *WantMap        // Wants by upstream peers
 	DownWants *WantMap        // Wants by downstream peers (in response to /api/v0/refs from upstream)
 	SentWants *WantMap        // All wants that have been sent, and the peer that they were sent to
@@ -29,9 +29,9 @@ func New(host host.Host, ctx context.Context, addrs ...ma.Multiaddr) (*PeerManag
 		return nil, err
 	}
 
-	conns := bmm.New()
-	upIP := bmm.New()
-	refReqs := bmm.New()
+	upIP := bmm.New[peer.ID, string]()
+	conns := bmm.New[peer.ID, peer.ID]()
+	refReqs := bmm.New[string, cid.Cid]()
 	upWants := NewWantMap()
 	downWants := NewWantMap()
 	sentWants := NewWantMap()
@@ -64,7 +64,7 @@ func (pm *PeerManager) DownstreamForPeer(upPeer peer.ID) []peer.ID {
 
 		return []peer.ID{downPeer}
 	} else {
-		return []peer.ID{downPeers[0].(peer.ID)}
+		return []peer.ID{downPeers[0]}
 	}
 }
 
@@ -92,7 +92,7 @@ func (pm *PeerManager) UpPeers() []peer.ID {
 	keys := pm.conns.Keys()
 	peers := make([]peer.ID, 0, len(keys))
 	for _, id := range keys {
-		peers = append(peers, id.(peer.ID))
+		peers = append(peers, id)
 	}
 	return peers
 }
@@ -122,7 +122,7 @@ func (pm *PeerManager) UpstreamPeersForIP(ip net.IP) []peer.ID {
 	keys := pm.upIP.LookupValue(ip.String())
 	peerIds := make([]peer.ID, 0, len(keys))
 	for _, id := range keys {
-		peerIds = append(peerIds, id.(peer.ID))
+		peerIds = append(peerIds, id)
 	}
 	return peerIds
 }
@@ -134,7 +134,7 @@ func (pm *PeerManager) UpstreamIPForPeer(id peer.ID) (net.IP, bool) {
 	if len(keys) > 0 {
 		// Since this is set up when the peer actually connects, we know that there is a single IP
 		// for this peer
-		return net.ParseIP(keys[0].(string)), true
+		return net.ParseIP(keys[0]), true
 	}
 	return nil, false
 }
@@ -154,17 +154,17 @@ func (pm *PeerManager) RefsForCid(c cid.Cid) []net.IP {
 	keys := pm.refReqs.LookupValue(c)
 	ips := make([]net.IP, 0, len(keys))
 	for _, ip := range keys {
-		ips = append(ips, net.ParseIP(ip.(string)))
+		ips = append(ips, net.ParseIP(ip))
 	}
 	return ips
 }
 
 // CidsForRefIp returns all the CIDs that have been requested by the IP via /api/v0/refs
 func (pm *PeerManager) CidsForRefIp(ip net.IP) []cid.Cid {
-	values := pm.refReqs.LookupKey(ip)
+	values := pm.refReqs.LookupKey(ip.String())
 	cids := make([]cid.Cid, 0, len(values))
 	for _, c := range values {
-		cids = append(cids, c.(cid.Cid))
+		cids = append(cids, c)
 	}
 	return cids
 }
@@ -174,7 +174,7 @@ func (pm *PeerManager) UpstreamForPeer(id peer.ID) []peer.ID {
 	keys := pm.conns.LookupValue(id)
 	peers := make([]peer.ID, 0, len(keys))
 	for _, p := range keys {
-		peers = append(peers, p.(peer.ID))
+		peers = append(peers, p)
 	}
 	return peers
 }

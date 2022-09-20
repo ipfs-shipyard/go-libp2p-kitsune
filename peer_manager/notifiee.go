@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/mcamou/go-libp2p-kitsune/prometheus"
 	ma "github.com/multiformats/go-multiaddr"
 )
@@ -66,7 +65,7 @@ func (n *Notifiee) Disconnected(net network.Network, conn network.Conn) { // cal
 		// will reconnect and get assigned another one)
 		upPeers := n.peerManager.conns.DeleteValue(remotePeer)
 		for _, id := range upPeers {
-			err := n.peerManager.down.host.Network().ClosePeer(id.(peer.ID))
+			err := n.peerManager.down.host.Network().ClosePeer(id)
 			if err != nil {
 				log.Warnf("Error disconnecting from downstream peer %s: %s", id, err)
 			}

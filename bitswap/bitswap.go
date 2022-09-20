@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -42,11 +43,11 @@ type Bitswap struct {
 	host           host.Host
 	peerManager    *pmgr.PeerManager
 	enablePreload  bool
-	wantTimestamps *bmm.BiMultiMap // CID <-> time WANT sent (for outstanding blocks)
+	wantTimestamps *bmm.BiMultiMap[cid.Cid, time.Time] // CID <-> time WANT sent (for outstanding blocks)
 }
 
 func New(h host.Host, peerManager *pmgr.PeerManager, enablePreload bool) *Bitswap {
-	return &Bitswap{h, peerManager, enablePreload, bmm.New()}
+	return &Bitswap{h, peerManager, enablePreload, bmm.New[cid.Cid, time.Time]()}
 }
 
 // AddHandler adds the handlers for the bitswap protocols
@@ -184,7 +185,7 @@ func (bs *Bitswap) handleBlocks(
 		times := bs.wantTimestamps.DeleteKey(c)
 
 		if len(times) > 0 {
-			elapsed := time.Since(times[0].(time.Time)).Milliseconds()
+			elapsed := time.Since(times[0]).Milliseconds()
 			if bs.peerManager.IsDownstream(fromPeer) {
 				prometheus.DownstreamBlockRTTms.WithLabelValues(fromPeer.String()).Observe(float64(elapsed))
 			} else {
