@@ -10,18 +10,18 @@ import (
 	"strings"
 
 	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-core/crypto"
-	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
 
 	logging "github.com/ipfs/go-log/v2"
 
 	ma "github.com/multiformats/go-multiaddr"
 
-	"github.com/mcamou/go-libp2p-kitsune/bitswap"
-	"github.com/mcamou/go-libp2p-kitsune/copy"
-	pmgr "github.com/mcamou/go-libp2p-kitsune/peer_manager"
-	"github.com/mcamou/go-libp2p-kitsune/prometheus"
+	"github.com/ipfs-shipyard/go-libp2p-kitsune/bitswap"
+	"github.com/ipfs-shipyard/go-libp2p-kitsune/copy"
+	pmgr "github.com/ipfs-shipyard/go-libp2p-kitsune/peer_manager"
+	"github.com/ipfs-shipyard/go-libp2p-kitsune/prometheus"
 )
 
 var log = logging.Logger("main")

@@ -7,14 +7,14 @@ import (
 	"io"
 	"os"
 
-	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/protocol"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/protocol"
 
 	logging "github.com/ipfs/go-log/v2"
 
-	"github.com/mcamou/go-libp2p-kitsune/bitswap"
-	pmgr "github.com/mcamou/go-libp2p-kitsune/peer_manager"
+	"github.com/ipfs-shipyard/go-libp2p-kitsune/bitswap"
+	pmgr "github.com/ipfs-shipyard/go-libp2p-kitsune/peer_manager"
 )
 
 var log = logging.Logger("copy")
@@ -62,6 +62,10 @@ func Handler(ha host.Host, connMgr *pmgr.PeerManager) func(s network.Stream) {
 
 		log.Debugf("Opening stream: %v: %v -> %v\n", proto, upPeer, downPeer)
 		downStream, err := ha.NewStream(context.Background(), downPeer, proto)
+		if err != nil {
+			log.Errorf("Error while opening downstream: %v %v: %v -> %v\n", err, proto, upPeer, downPeer)
+			return
+		}
 		defer downStream.Close()
 
 		if err != nil {

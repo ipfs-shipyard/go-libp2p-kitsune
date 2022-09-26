@@ -1,11 +1,10 @@
-module github.com/mcamou/go-libp2p-kitsune
+module github.com/ipfs-shipyard/go-libp2p-kitsune
 
 go 1.19
 
 require (
 	github.com/ipfs/go-merkledag v0.7.0
 	github.com/libp2p/go-libp2p v0.22.0
-	github.com/libp2p/go-libp2p-core v0.20.1
 	github.com/mcamou/go-bimultimap v0.1.1
 	github.com/multiformats/go-multiaddr v0.7.0
 )
@@ -112,6 +111,7 @@ require (
 	github.com/ipld/go-codec-dagpb v1.3.2 // indirect
 	github.com/ipld/go-ipld-prime v0.16.0 // indirect
 	github.com/jbenet/goprocess v0.1.4 // indirect
+	github.com/libp2p/go-libp2p-core v0.20.1 // indirect
 	github.com/libp2p/go-yamux/v3 v3.1.2 // indirect
 	github.com/marten-seemann/qtls-go1-18 v0.1.2 // indirect
 	github.com/marten-seemann/qtls-go1-19 v0.1.0 // indirect

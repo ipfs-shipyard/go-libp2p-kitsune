@@ -3,8 +3,8 @@ package peer_manager
 import (
 	"fmt"
 
-	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/mcamou/go-libp2p-kitsune/prometheus"
+	"github.com/ipfs-shipyard/go-libp2p-kitsune/prometheus"
+	"github.com/libp2p/go-libp2p/core/network"
 	ma "github.com/multiformats/go-multiaddr"
 )
 

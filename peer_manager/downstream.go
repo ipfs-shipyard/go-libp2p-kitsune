@@ -10,9 +10,9 @@ import (
 	"time"
 
 	logging "github.com/ipfs/go-log/v2"
-	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 )
 
@@ -89,7 +89,7 @@ func getPeerInfo(httpAddr ma.Multiaddr) (*PeerInfo, error) {
 				if err == nil {
 					host = fmt.Sprintf("/dns6/%s", hostAddr)
 				} else {
-					return nil, fmt.Errorf("Error while getting host address from multiaddr %s", httpAddr)
+					return nil, fmt.Errorf("error while getting host address from multiaddr %s", httpAddr)
 				}
 			}
 		}
@@ -148,13 +148,13 @@ func getPeerInfo(httpAddr ma.Multiaddr) (*PeerInfo, error) {
 	}
 
 	if len(port) == 0 {
-		return nil, fmt.Errorf("Cannot find tcp/udp port for peer %s, addresses: %v", httpAddr, idResp.Addresses)
+		return nil, fmt.Errorf("cannot find tcp/udp port for peer %s, addresses: %v", httpAddr, idResp.Addresses)
 	}
 
 	addrStr := fmt.Sprintf("%s%s/p2p/%s", host, port, idResp.ID)
 	addr, err := ma.NewMultiaddr(addrStr)
 	if err != nil {
-		return nil, fmt.Errorf("Error while parsing multiaddr %s: %s", addrStr, err)
+		return nil, fmt.Errorf("error while parsing multiaddr %s: %s", addrStr, err)
 	}
 
 	_, id := peer.SplitAddr(addr)

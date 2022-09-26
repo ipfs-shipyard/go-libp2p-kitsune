@@ -2,7 +2,7 @@ package peer_manager
 
 import (
 	"github.com/ipfs/go-cid"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/peer"
 	bmm "github.com/mcamou/go-bimultimap"
 )
 
@@ -19,47 +19,19 @@ func (wm *WantMap) Merge(other *WantMap) *WantMap {
 }
 
 func (wm *WantMap) PeersForCid(c cid.Cid) []peer.ID {
-	values := wm.wantMap.LookupKey(c)
-	peers := make([]peer.ID, 0, len(values))
-
-	for _, p := range values {
-		peers = append(peers, p)
-	}
-
-	return peers
+	return wm.wantMap.LookupKey(c)
 }
 
 func (wm *WantMap) CidsForPeer(id peer.ID) []cid.Cid {
-	keys := wm.wantMap.LookupValue(id)
-	cids := make([]cid.Cid, 0, len(keys))
-
-	for _, p := range keys {
-		cids = append(cids, p)
-	}
-
-	return cids
+	return wm.wantMap.LookupValue(id)
 }
 
 func (wm *WantMap) AllCids() []cid.Cid {
-	keys := wm.wantMap.Keys()
-	cids := make([]cid.Cid, 0, len(keys))
-
-	for _, c := range keys {
-		cids = append(cids, c)
-	}
-
-	return cids
+	return wm.wantMap.Keys()
 }
 
 func (wm *WantMap) AllPeers() []peer.ID {
-	values := wm.wantMap.Values()
-	peers := make([]peer.ID, 0, len(values))
-
-	for _, id := range values {
-		peers = append(peers, id)
-	}
-
-	return peers
+	return wm.wantMap.Values()
 }
 
 func (wm *WantMap) Add(p peer.ID, c cid.Cid) {

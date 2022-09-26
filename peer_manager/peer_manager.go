@@ -5,8 +5,8 @@ import (
 	"net"
 
 	"github.com/ipfs/go-cid"
-	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 
 	ma "github.com/multiformats/go-multiaddr"
 
@@ -89,12 +89,7 @@ func (pm *PeerManager) DownPeers() []ma.Multiaddr {
 
 // UpPeers returns the peer IDs of all connected upstream peers
 func (pm *PeerManager) UpPeers() []peer.ID {
-	keys := pm.conns.Keys()
-	peers := make([]peer.ID, 0, len(keys))
-	for _, id := range keys {
-		peers = append(peers, id)
-	}
-	return peers
+	return pm.conns.Keys()
 }
 
 // AddUpstreamPeerIP adds a mapping between an upstream peer ID and its IP address
@@ -119,12 +114,7 @@ func (pm *PeerManager) DeleteUpstreamPeerIP(id peer.ID) {
 // UpstreamPeersForIP returns the upstream peers associated with a given IP. Note that there can be
 // several in the case of peers behind a NAT.
 func (pm *PeerManager) UpstreamPeersForIP(ip net.IP) []peer.ID {
-	keys := pm.upIP.LookupValue(ip.String())
-	peerIds := make([]peer.ID, 0, len(keys))
-	for _, id := range keys {
-		peerIds = append(peerIds, id)
-	}
-	return peerIds
+	return pm.upIP.LookupValue(ip.String())
 }
 
 // UpstreamIPForPeer returns the upstream IP associated with a given peer.
@@ -161,22 +151,12 @@ func (pm *PeerManager) RefsForCid(c cid.Cid) []net.IP {
 
 // CidsForRefIp returns all the CIDs that have been requested by the IP via /api/v0/refs
 func (pm *PeerManager) CidsForRefIp(ip net.IP) []cid.Cid {
-	values := pm.refReqs.LookupKey(ip.String())
-	cids := make([]cid.Cid, 0, len(values))
-	for _, c := range values {
-		cids = append(cids, c)
-	}
-	return cids
+	return pm.refReqs.LookupKey(ip.String())
 }
 
 // UpstreamForPeer returns all the upstream peers associated with a downstream peer
 func (pm *PeerManager) UpstreamForPeer(id peer.ID) []peer.ID {
-	keys := pm.conns.LookupValue(id)
-	peers := make([]peer.ID, 0, len(keys))
-	for _, p := range keys {
-		peers = append(peers, p)
-	}
-	return peers
+	return pm.conns.LookupValue(id)
 }
 
 // IpFromMultiaddr extracts the IP address from a multiaddr
