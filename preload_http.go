@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 
+	pmgr "github.com/ipfs-shipyard/go-libp2p-kitsune/peer_manager"
 	"github.com/ipfs/go-cid"
-	"github.com/libp2p/go-libp2p-core/peer"
-	pmgr "github.com/mcamou/go-libp2p-kitsune/peer_manager"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 func startPreloadHandler(peerMgr *pmgr.PeerManager, port uint64) {

@@ -18,10 +18,10 @@ import (
 
 	ma "github.com/multiformats/go-multiaddr"
 
-	"github.com/mcamou/go-libp2p-kitsune/bitswap"
-	"github.com/mcamou/go-libp2p-kitsune/copy"
-	pmgr "github.com/mcamou/go-libp2p-kitsune/peer_manager"
-	"github.com/mcamou/go-libp2p-kitsune/prometheus"
+	"github.com/ipfs-shipyard/go-libp2p-kitsune/bitswap"
+	"github.com/ipfs-shipyard/go-libp2p-kitsune/copy"
+	pmgr "github.com/ipfs-shipyard/go-libp2p-kitsune/peer_manager"
+	"github.com/ipfs-shipyard/go-libp2p-kitsune/prometheus"
 )
 
 var log = logging.Logger("main")

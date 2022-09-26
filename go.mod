@@ -1,4 +1,4 @@
-module github.com/mcamou/go-libp2p-kitsune
+module github.com/ipfs-shipyard/go-libp2p-kitsune
 
 go 1.19
 

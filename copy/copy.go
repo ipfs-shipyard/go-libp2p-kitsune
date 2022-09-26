@@ -7,14 +7,14 @@ import (
 	"io"
 	"os"
 
-	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/protocol"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/protocol"
 
 	logging "github.com/ipfs/go-log/v2"
 
-	"github.com/mcamou/go-libp2p-kitsune/bitswap"
-	pmgr "github.com/mcamou/go-libp2p-kitsune/peer_manager"
+	"github.com/ipfs-shipyard/go-libp2p-kitsune/bitswap"
+	pmgr "github.com/ipfs-shipyard/go-libp2p-kitsune/peer_manager"
 )
 
 var log = logging.Logger("copy")
