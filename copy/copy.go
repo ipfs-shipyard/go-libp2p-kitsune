@@ -62,6 +62,10 @@ func Handler(ha host.Host, connMgr *pmgr.PeerManager) func(s network.Stream) {
 
 		log.Debugf("Opening stream: %v: %v -> %v\n", proto, upPeer, downPeer)
 		downStream, err := ha.NewStream(context.Background(), downPeer, proto)
+		if err != nil {
+			log.Errorf("Error while opening downstream: %v %v: %v -> %v\n", err, proto, upPeer, downPeer)
+			return
+		}
 		defer downStream.Close()
 
 		if err != nil {
