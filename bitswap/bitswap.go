@@ -60,7 +60,7 @@ func (bs *Bitswap) AddHandler() {
 
 // handler is a stream handler for the /ipfs/bitswap/* protocols
 //
-// At the moment it only handles the absolute minimum for the preload nodes to work
+// # At the moment it only handles the absolute minimum for the preload nodes to work
 //
 // WHY: In Bitswap, when a peer receives a WANT, it opens a new stream to send the BLOCKS messages
 // instead of reusing the stream the requesting peer already opened. Therefore we need a special
@@ -275,10 +275,10 @@ func (bs *Bitswap) handleDontHaves(
 }
 
 // handleWantlist handles the WANT messages. This is complicated by a few things:
-// - Full vs. diff wantlists.
-// - Wants vs. Cancels.
-// - Preload mode. In this case, we have a WANT from downstream and don't know which
-//   upstream peer to send it to.
+//   - Full vs. diff wantlists.
+//   - Wants vs. Cancels.
+//   - Preload mode. In this case, we have a WANT from downstream and don't know which
+//     upstream peer to send it to.
 func (bs *Bitswap) handleWantlist(
 	proto protocol.ID,
 	sourcePeer peer.ID, // Peer that the message comes from

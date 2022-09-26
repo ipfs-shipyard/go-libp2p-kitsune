@@ -15,12 +15,12 @@ import (
 
 type PeerManager struct {
 	down      *Downstream
-	upIP      *bmm.BiMultiMap[peer.ID, string] // upstream peer ID <-> IP address (as a string)
+	upIP      *bmm.BiMultiMap[peer.ID, string]  // upstream peer ID <-> IP address (as a string)
 	conns     *bmm.BiMultiMap[peer.ID, peer.ID] // upstream peer ID <-> downstream peer ID
-	refReqs   *bmm.BiMultiMap[string, cid.Cid] // upstream IP (as a string) <-> CID (requested by /api/v0/refs)
-	UpWants   *WantMap        // Wants by upstream peers
-	DownWants *WantMap        // Wants by downstream peers (in response to /api/v0/refs from upstream)
-	SentWants *WantMap        // All wants that have been sent, and the peer that they were sent to
+	refReqs   *bmm.BiMultiMap[string, cid.Cid]  // upstream IP (as a string) <-> CID (requested by /api/v0/refs)
+	UpWants   *WantMap                          // Wants by upstream peers
+	DownWants *WantMap                          // Wants by downstream peers (in response to /api/v0/refs from upstream)
+	SentWants *WantMap                          // All wants that have been sent, and the peer that they were sent to
 }
 
 func New(host host.Host, ctx context.Context, addrs ...ma.Multiaddr) (*PeerManager, error) {
