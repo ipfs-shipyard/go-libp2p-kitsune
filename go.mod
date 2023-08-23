@@ -1,6 +1,6 @@
 module github.com/ipfs-shipyard/go-libp2p-kitsune
 
-go 1.19
+go 1.20
 
 require (
 	github.com/ipfs/go-merkledag v0.7.0
